@@ -1,0 +1,231 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   ROOT
+============================================================ */
+
+html {
+  min-height: 100%;
+  background-color: #f8fafc;
+}
+
+html.dark {
+  background-color: #0b0f17;
+}
+
+/* ============================================================
+   BODY
+============================================================ */
+
+@layer base {
+  body {
+    @apply min-h-screen font-sans antialiased;
+
+    margin: 0;
+
+    background-color: #f8fafc;
+    color: #0f172a;
+
+    transition:
+      background-color 200ms ease,
+      color 200ms ease;
+  }
+
+  html.dark body {
+    background-color: #0b0f17;
+    color: #f1f5f9;
+  }
+
+  ::selection {
+    background-color: #0284c7;
+    color: #ffffff;
+  }
+}
+
+/* ============================================================
+   ROOT APPLICATION
+============================================================ */
+
+#root {
+  min-height: 100vh;
+}
+
+/* ============================================================
+   LINKS
+============================================================ */
+
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ============================================================
+   BUTTONS
+============================================================ */
+
+button {
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* ============================================================
+   FORM CONTROLS
+============================================================ */
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+}
+
+input,
+textarea,
+select {
+  color-scheme: light;
+}
+
+html.dark input,
+html.dark textarea,
+html.dark select {
+  color-scheme: dark;
+}
+
+/* ============================================================
+   GLASS CARD
+============================================================ */
+
+.glass-card {
+  @apply
+    bg-white/80
+    dark:bg-dark-card/80
+    backdrop-blur-md
+    border
+    border-slate-200
+    dark:border-dark-border
+    rounded-xl
+    shadow-xl;
+
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+/* ============================================================
+   GLASS NAV
+============================================================ */
+
+.glass-nav {
+  @apply
+    bg-white/80
+    dark:bg-dark-bg/80
+    backdrop-blur-lg
+    border-b
+    border-slate-200
+    dark:border-dark-border;
+
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease;
+}
+
+/* ============================================================
+   SCROLLBAR - LIGHT
+============================================================ */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #0284c7;
+}
+
+/* ============================================================
+   SCROLLBAR - DARK
+============================================================ */
+
+html.dark ::-webkit-scrollbar-track {
+  background: #0b0f17;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #1f2937;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #0284c7;
+}
+
+/* ============================================================
+   THEME TRANSITION
+============================================================ */
+
+.theme-transition,
+.theme-transition *,
+.theme-transition *::before,
+.theme-transition *::after {
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease,
+    fill 200ms ease,
+    stroke 200ms ease;
+}
+
+/* ============================================================
+   MOBILE TAP HIGHLIGHT
+============================================================ */
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ============================================================
+   FOCUS
+============================================================ */
+
+:focus-visible {
+  outline: 2px solid #0284c7;
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   DISABLED CONTROLS
+============================================================ */
+
+button:disabled,
+input:disabled,
+textarea:disabled,
+select:disabled {
+  cursor: not-allowed;
+}
+
+/* ============================================================
+   REDUCE MOTION
+============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

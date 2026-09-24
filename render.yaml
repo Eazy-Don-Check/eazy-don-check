@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: eazy-don-check-api
+    runtime: node
+    rootDir: server
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
