@@ -2030,7 +2030,7 @@ const Sidebar = () => {
             fixed
             top-3
             left-3
-            z-[80]
+            z-[150]
             w-11
             h-11
             rounded-xl

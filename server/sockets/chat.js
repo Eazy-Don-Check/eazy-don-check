@@ -726,7 +726,7 @@ module.exports =
 
     io.on(
       'connection',
-      async (socket) => {  // <-- FIXED: Added 'async' here
+      (socket) => {
         const userId =
           socket.user._id.toString();
 
@@ -755,32 +755,6 @@ module.exports =
           .add(socket.id);
 
         // ------------------------------------------------------
-        // Persist presence in MongoDB.
-        //
-        // The in-memory map remains the authoritative source for
-        // Socket.IO presence on this server instance, while these
-        // fields keep REST/API profile responses in sync.
-        // ------------------------------------------------------
-
-        try {
-          await User.findByIdAndUpdate(
-            userId,
-            {
-              $set: {
-                isOnline: true,
-                lastSeen: null
-              }
-            },
-            { new: false }
-          );
-        } catch (presenceError) {
-          console.error(
-            '❌ Failed to persist online status:',
-            presenceError
-          );
-        }
-
-        // ------------------------------------------------------
         // Personal room
         // ------------------------------------------------------
 
@@ -788,15 +762,6 @@ module.exports =
           `user:${userId}`
         );
 
-        // Send the newly connected client the current presence
-        // snapshot first. This prevents the client from having to
-        // wait for future online/offline events.
-        socket.emit(
-          'online_users',
-          Array.from(onlineUsers.keys())
-        );
-
-        // Notify every connected client about this user's status.
         io.emit(
           'user_online_status',
           {
@@ -804,6 +769,23 @@ module.exports =
             isOnline: true
           }
         );
+
+        // ------------------------------------------------------
+        // Allow a connected client to query the authoritative
+        // real-time presence of another user. This is important
+        // when a DM is opened after the other user was already
+        // online, because the original online event may have
+        // happened before this client started listening.
+        // ------------------------------------------------------
+        socket.on('get_user_online_status', ({ userId: targetUserId } = {}) => {
+          if (!targetUserId) return;
+
+          const normalizedTargetId = String(targetUserId);
+          socket.emit('user_online_status', {
+            userId: normalizedTargetId,
+            isOnline: onlineUsers.has(normalizedTargetId)
+          });
+        });
 
         // Re-deliver any still-ringing call when the recipient reconnects.
         for (const pending of pendingCalls.values()) {
@@ -1435,38 +1417,38 @@ module.exports =
               }
 
               // ------------------------------------------------
-              // Update recipient unread message count
-              // ------------------------------------------------
+// Update recipient unread message count
+// ------------------------------------------------
 
-              if (recipientId) {
-                const unreadData =
-                  await getUserUnreadCounts(
-                    recipientId
-                  );
+if (recipientId) {
+  const unreadData =
+    await getUserUnreadCounts(
+      recipientId
+    );
 
-                io.to(
-                  `user:${recipientId}`
-                ).emit(
-                  'unread_message_count',
-                  {
-                    roomId:
-                      activeRoom._id.toString(),
+  io.to(
+    `user:${recipientId}`
+  ).emit(
+    'unread_message_count',
+    {
+      roomId:
+        activeRoom._id.toString(),
 
-                    unreadCount:
-                      unreadData.rooms.find(
-                        (roomItem) =>
-                          roomItem.roomId ===
-                          activeRoom._id.toString()
-                      )?.unreadCount || 0,
+      unreadCount:
+        unreadData.rooms.find(
+          (roomItem) =>
+            roomItem.roomId ===
+            activeRoom._id.toString()
+        )?.unreadCount || 0,
 
-                    totalUnread:
-                      unreadData.totalUnread,
+      totalUnread:
+        unreadData.totalUnread,
 
-                    rooms:
-                      unreadData.rooms
-                  }
-                );
-              }
+      rooms:
+        unreadData.rooms
+    }
+  );
+}
 
               // ------------------------------------------------
               // Confirm to sender
@@ -1498,143 +1480,115 @@ module.exports =
         // ======================================================
 
         socket.on(
-          'mark_messages_read',
-          async ({
-            roomId
-          } = {}) => {
-            try {
-              if (!roomId) {
-                return;
-              }
+  'mark_messages_read',
+  async ({
+    roomId,
+    throughMessageId = null
+  } = {}) => {
+    try {
+      if (!roomId) {
+        return;
+      }
 
-              const room =
-                await Room.findById(
-                  roomId
-                );
+      if (throughMessageId && !mongoose.Types.ObjectId.isValid(throughMessageId)) {
+        return;
+      }
 
-              if (!room) {
-                return;
-              }
+      const room = await Room.findById(roomId);
 
-              if (
-                !userIsSuperAdmin(socket.user) &&
-                !userIsRoomMember(
-                  room,
-                  userId
-                )
-              ) {
-                return;
-              }
+      if (!room) {
+        return;
+      }
 
-              // --------------------------------------------------------
-              // Find unread incoming messages
-              // --------------------------------------------------------
+      if (
+        !userIsSuperAdmin(socket.user) &&
+        !userIsRoomMember(room, userId)
+      ) {
+        return;
+      }
 
-              const unreadMessages =
-                await Message.find({
-                  room: roomId,
+      const unreadFilter = {
+        room: roomId,
+        'read_by.user': { $ne: userId },
+        sender: { $ne: userId },
+        is_deleted: false,
+        deleted_for: { $ne: userId }
+      };
 
-                  'read_by.user': {
-                    $ne: userId
-                  },
+      let readFilter = { ...unreadFilter };
 
-                  sender: {
-                    $ne: userId
-                  },
+      if (throughMessageId) {
+        const boundary = await Message.findOne({
+          room: roomId,
+          _id: throughMessageId,
+          is_deleted: false,
+          deleted_for: { $ne: userId }
+        })
+          .select('_id createdAt')
+          .lean();
 
-                  is_deleted: false
-                }).select('_id');
+        if (!boundary) {
+          return;
+        }
 
-              // --------------------------------------------------------
-              // Mark messages as read
-              // --------------------------------------------------------
+        readFilter = {
+          ...unreadFilter,
+          $or: [
+            { createdAt: { $lt: boundary.createdAt } },
+            {
+              createdAt: boundary.createdAt,
+              _id: { $lte: boundary._id }
+            }
+          ]
+        };
+      }
 
-              if (
-                unreadMessages.length >
-                0
-              ) {
-                await Message.updateMany(
-                  {
-                    _id: {
-                      $in:
-                        unreadMessages.map(
-                          (message) =>
-                            message._id
-                        )
-                    }
-                  },
-                  {
-                    $push: {
-                      read_by: {
-                        user:
-                          userId,
-
-                        read_at:
-                          new Date()
-                      }
-                    }
-                  }
-                );
-              }
-
-              // --------------------------------------------------------
-              // Recalculate authoritative unread counts
-              // --------------------------------------------------------
-
-              const unreadData =
-                await getUserUnreadCounts(
-                  userId
-                );
-
-              // --------------------------------------------------------
-              // Send updated count to the user who opened the room
-              // --------------------------------------------------------
-
-              socket.emit(
-                'unread_message_count',
-                {
-                  roomId:
-                    roomId.toString(),
-
-                  unreadCount: 0,
-
-                  totalUnread:
-                    unreadData.totalUnread,
-
-                  rooms:
-                    unreadData.rooms
-                }
-              );
-
-              // --------------------------------------------------------
-              // Tell other sockets/users in this room that messages
-              // were read.
-              // --------------------------------------------------------
-
-              socket
-                .to(`room:${roomId}`)
-                .emit(
-                  'messages_read_update',
-                  {
-                    roomId:
-                      roomId.toString(),
-
-                    readByUserId:
-                      userId,
-
-                    unreadCount: 0
-                  }
-                );
-
-            } catch (error) {
-              console.error(
-                '❌ Error marking messages read:',
-                error
-              );
+      const updateResult = await Message.updateMany(
+        readFilter,
+        {
+          $push: {
+            read_by: {
+              user: userId,
+              read_at: new Date()
             }
           }
-        );
+        }
+      );
 
+      const unreadData = await getUserUnreadCounts(userId);
+      const currentRoom = unreadData.rooms.find(
+        (item) => item.roomId === roomId.toString()
+      );
+
+      socket.emit(
+        'unread_message_count',
+        {
+          roomId: roomId.toString(),
+          unreadCount: currentRoom?.unreadCount || 0,
+          totalUnread: unreadData.totalUnread,
+          rooms: unreadData.rooms,
+          throughMessageId: throughMessageId || null,
+          markedRead: updateResult.modifiedCount || 0
+        }
+      );
+
+      socket.to(`room:${roomId}`).emit(
+        'messages_read_update',
+        {
+          roomId: roomId.toString(),
+          readByUserId: userId,
+          unreadCount: currentRoom?.unreadCount || 0,
+          throughMessageId: throughMessageId || null
+        }
+      );
+    } catch (error) {
+      console.error(
+        '❌ Error marking messages read:',
+        error
+      );
+    }
+  }
+);
 
         // ======================================================
         // TYPING START
@@ -1813,14 +1767,8 @@ module.exports =
           if (!pending || pending.targetUserId !== userId) return;
 
           pending.accepted = true;
-          if (pending.timer) {
-            clearTimeout(pending.timer);
-            pending.timer = null;
-          }
+          clearPendingCall(String(callId));
 
-          // Keep the call session in pendingCalls after acceptance.
-          // WebRTC offer/answer/ICE signaling still needs this session
-          // record until either side explicitly ends the call.
           io.to(`user:${pending.callerId}`).emit('call_accepted', {
             callId: pending.callId,
             peerId: userId,
@@ -1903,148 +1851,165 @@ module.exports =
 
         // ========================================================
         // MESSAGE REACTIONS
-        // ========================================================
-        socket.on('toggle_message_reaction', async ({ messageId, emoji } = {}) => {
-          try {
-            if (!messageId || typeof emoji !== 'string') return;
-            const allowedEmojis = ['👍', '❤️', '😂', '😮', '😢', '😡', '👏', '🔥'];
-            if (!allowedEmojis.includes(emoji)) return socket.emit('error_message', { message: 'Unsupported reaction.' });
-            if (!mongoose.Types.ObjectId.isValid(messageId)) return;
+    // ========================================================
+    socket.on('toggle_message_reaction', async ({ messageId, emoji } = {}) => {
+      try {
+        if (!messageId || typeof emoji !== 'string') return;
+        const allowedEmojis = ['👍', '❤️', '😂', '😮', '😢', '😡', '👏', '🔥'];
+        if (!allowedEmojis.includes(emoji)) return socket.emit('error_message', { message: 'Unsupported reaction.' });
+        if (!mongoose.Types.ObjectId.isValid(messageId)) return;
 
-            const message = await Message.findById(messageId);
-            if (!message || message.is_deleted) return socket.emit('error_message', { message: 'Message not found.' });
-            const room = await Room.findById(message.room);
-            if (!(userIsSuperAdmin(socket.user) || userIsRoomMember(room, userId))) return socket.emit('error_message', { message: 'You do not have access to this message.' });
+        const message = await Message.findById(messageId);
+        if (!message || message.is_deleted) return socket.emit('error_message', { message: 'Message not found.' });
+        const room = await Room.findById(message.room);
+        if (!(userIsSuperAdmin(socket.user) || userIsRoomMember(room, userId))) return socket.emit('error_message', { message: 'You do not have access to this message.' });
 
-            // One reaction per user per message. Clicking the currently selected
-            // reaction removes it; selecting another reaction replaces the old one.
-            let currentReaction = null;
-            for (const item of message.reactions) {
-              if (item.users.some((id) => id.toString() === userId)) {
-                currentReaction = item.emoji;
-                item.users = item.users.filter((id) => id.toString() !== userId);
-              }
+        // One reaction per user per message. Clicking the currently selected
+        // reaction removes it; selecting another reaction replaces the old one.
+        let currentReaction = null;
+        for (const item of message.reactions) {
+          if (item.users.some((id) => id.toString() === userId)) {
+            currentReaction = item.emoji;
+            item.users = item.users.filter((id) => id.toString() !== userId);
+          }
+        }
+
+        message.reactions = message.reactions.filter((item) => item.users.length);
+
+        if (currentReaction !== emoji) {
+          const targetReaction = message.reactions.find((item) => item.emoji === emoji);
+          if (targetReaction) targetReaction.users.push(userId);
+          else message.reactions.push({ emoji, users: [userId] });
+        }
+
+        await message.save();
+        const fullMessage = await populateMessage(message._id);
+        const payload = { ...fullMessage, reactions: fullMessage.reactions || [] };
+
+        if (room.type === 'public' || room.type === 'private') {
+          io.to(`room:${room._id}`).emit('message_reaction_updated', payload);
+          io.to(`user:${userId}`).emit('message_reaction_updated', payload);
+        } else {
+          // Direct-message rooms must notify both participants explicitly.
+          // Do not rely only on room.members because older/direct rooms may
+          // have an incomplete member list.
+          const participantIds = new Set([
+            message.sender?.toString?.() || String(message.sender || ''),
+            message.recipient?.toString?.() || String(message.recipient || ''),
+            ...(Array.isArray(room.members)
+              ? room.members.map((memberId) =>
+                  memberId?.toString?.() || String(memberId || '')
+                )
+              : [])
+          ]);
+
+          participantIds.forEach((memberId) => {
+            if (memberId) {
+              io.to(`user:${memberId}`).emit('message_reaction_updated', payload);
             }
+          });
+        }
+      } catch (error) {
+        console.error('❌ Error toggling message reaction:', error);
+        socket.emit('error_message', { message: 'Failed to update reaction.' });
+      }
+    });
 
-            message.reactions = message.reactions.filter((item) => item.users.length);
+    // ========================================================
+    // EDIT / DELETE MESSAGES
+    // ========================================================
+    socket.on('edit_message', async ({ messageId, content } = {}) => {
+      try {
+        if (!messageId || typeof content !== 'string') return;
+        if (!mongoose.Types.ObjectId.isValid(messageId)) return;
 
-            if (currentReaction !== emoji) {
-              const targetReaction = message.reactions.find((item) => item.emoji === emoji);
-              if (targetReaction) targetReaction.users.push(userId);
-              else message.reactions.push({ emoji, users: [userId] });
-            }
+        const nextContent = content.trim();
+        if (!nextContent) return socket.emit('error_message', { message: 'Edited message cannot be empty.' });
 
-            await message.save();
-            const fullMessage = await populateMessage(message._id);
-            const payload = { ...fullMessage, reactions: fullMessage.reactions || [] };
+        const message = await Message.findById(messageId);
+        if (!message || message.is_deleted) return socket.emit('error_message', { message: 'Message not found.' });
+        if (message.sender.toString() !== userId) return socket.emit('error_message', { message: 'Only the sender can edit this message.' });
+        if (message.message_type === 'system') return socket.emit('error_message', { message: 'System messages cannot be edited.' });
 
-            if (room.type === 'public' || room.type === 'private') {
-              io.to(`room:${room._id}`).emit('message_reaction_updated', payload);
-              io.to(`user:${userId}`).emit('message_reaction_updated', payload);
+        const room = await Room.findById(message.room);
+        if (!(userIsSuperAdmin(socket.user) || userIsRoomMember(room, userId))) return socket.emit('error_message', { message: 'You do not have access to this message.' });
+
+        message.content = nextContent;
+        message.is_edited = true;
+        await message.save();
+
+        const fullMessage = await populateMessage(message._id);
+        const payload = { ...fullMessage, edited: true };
+
+        if (room.type === 'direct') {
+          room.members.forEach((memberId) => io.to(`user:${memberId}`).emit('message_updated', payload));
+        } else {
+          io.to(`room:${room._id}`).emit('message_updated', payload);
+          io.to(`user:${userId}`).emit('message_updated', payload);
+        }
+      } catch (error) {
+        console.error('❌ Error editing message:', error);
+        socket.emit('error_message', { message: 'Failed to edit message.' });
+      }
+    });
+
+    socket.on('delete_message', async ({ messageId } = {}) => {
+      try {
+        if (!messageId || !mongoose.Types.ObjectId.isValid(messageId)) return;
+
+        const message = await Message.findById(messageId);
+        if (!message) return socket.emit('error_message', { message: 'Message not found.' });
+        const room = await Room.findById(message.room);
+        if (!(userIsSuperAdmin(socket.user) || userIsRoomMember(room, userId))) return socket.emit('error_message', { message: 'You do not have access to this message.' });
+
+        const isSender = message.sender.toString() === userId;
+
+        if (isSender) {
+          // Sender deletion removes the message for everyone.
+          message.is_deleted = true;
+          message.content = '';
+          message.attachments = [];
+          message.reactions = [];
+          await message.save();
+
+          const payload = {
+            messageId: message._id.toString(),
+            roomId: room._id.toString(),
+            deletedForEveryone: true
+          };
+
+          if (room.type === 'direct') {
+            room.members.forEach((memberId) => io.to(`user:${memberId}`).emit('message_deleted', payload));
+            for (const memberId of room.members) await emitUnreadCount(io, memberId, room._id);
+          } else {
+            io.to(`room:${room._id}`).emit('message_deleted', payload);
+            io.to(`user:${userId}`).emit('message_deleted', payload);
+            if (room.type === 'public') {
+              for (const [memberId] of onlineUsers) await emitUnreadCount(io, memberId, room._id);
             } else {
-              room.members.forEach((memberId) => io.to(`user:${memberId}`).emit('message_reaction_updated', payload));
+              for (const memberId of room.members) await emitUnreadCount(io, memberId, room._id);
             }
-          } catch (error) {
-            console.error('❌ Error toggling message reaction:', error);
-            socket.emit('error_message', { message: 'Failed to update reaction.' });
           }
+          return;
+        }
+
+        // Recipient/member deletion only hides the message for that user.
+        const alreadyHidden = message.deleted_for.some((id) => id.toString() === userId);
+        if (!alreadyHidden) message.deleted_for.push(userId);
+        await message.save();
+
+        io.to(`user:${userId}`).emit('message_deleted', {
+          messageId: message._id.toString(),
+          roomId: room._id.toString(),
+          deletedForEveryone: false,
+          deletedForUserId: userId
         });
-
-        // ========================================================
-        // EDIT / DELETE MESSAGES
-        // ========================================================
-        socket.on('edit_message', async ({ messageId, content } = {}) => {
-          try {
-            if (!messageId || typeof content !== 'string') return;
-            if (!mongoose.Types.ObjectId.isValid(messageId)) return;
-
-            const nextContent = content.trim();
-            if (!nextContent) return socket.emit('error_message', { message: 'Edited message cannot be empty.' });
-
-            const message = await Message.findById(messageId);
-            if (!message || message.is_deleted) return socket.emit('error_message', { message: 'Message not found.' });
-            if (message.sender.toString() !== userId) return socket.emit('error_message', { message: 'Only the sender can edit this message.' });
-            if (message.message_type === 'system') return socket.emit('error_message', { message: 'System messages cannot be edited.' });
-
-            const room = await Room.findById(message.room);
-            if (!(userIsSuperAdmin(socket.user) || userIsRoomMember(room, userId))) return socket.emit('error_message', { message: 'You do not have access to this message.' });
-
-            message.content = nextContent;
-            message.is_edited = true;
-            await message.save();
-
-            const fullMessage = await populateMessage(message._id);
-            const payload = { ...fullMessage, edited: true };
-
-            if (room.type === 'direct') {
-              room.members.forEach((memberId) => io.to(`user:${memberId}`).emit('message_updated', payload));
-            } else {
-              io.to(`room:${room._id}`).emit('message_updated', payload);
-              io.to(`user:${userId}`).emit('message_updated', payload);
-            }
-          } catch (error) {
-            console.error('❌ Error editing message:', error);
-            socket.emit('error_message', { message: 'Failed to edit message.' });
-          }
-        });
-
-        socket.on('delete_message', async ({ messageId } = {}) => {
-          try {
-            if (!messageId || !mongoose.Types.ObjectId.isValid(messageId)) return;
-
-            const message = await Message.findById(messageId);
-            if (!message) return socket.emit('error_message', { message: 'Message not found.' });
-            const room = await Room.findById(message.room);
-            if (!(userIsSuperAdmin(socket.user) || userIsRoomMember(room, userId))) return socket.emit('error_message', { message: 'You do not have access to this message.' });
-
-            const isSender = message.sender.toString() === userId;
-
-            if (isSender) {
-              // Sender deletion removes the message for everyone.
-              message.is_deleted = true;
-              message.content = '';
-              message.attachments = [];
-              message.reactions = [];
-              await message.save();
-
-              const payload = {
-                messageId: message._id.toString(),
-                roomId: room._id.toString(),
-                deletedForEveryone: true
-              };
-
-              if (room.type === 'direct') {
-                room.members.forEach((memberId) => io.to(`user:${memberId}`).emit('message_deleted', payload));
-                for (const memberId of room.members) await emitUnreadCount(io, memberId, room._id);
-              } else {
-                io.to(`room:${room._id}`).emit('message_deleted', payload);
-                io.to(`user:${userId}`).emit('message_deleted', payload);
-                if (room.type === 'public') {
-                  for (const [memberId] of onlineUsers) await emitUnreadCount(io, memberId, room._id);
-                } else {
-                  for (const memberId of room.members) await emitUnreadCount(io, memberId, room._id);
-                }
-              }
-              return;
-            }
-
-            // Recipient/member deletion only hides the message for that user.
-            const alreadyHidden = message.deleted_for.some((id) => id.toString() === userId);
-            if (!alreadyHidden) message.deleted_for.push(userId);
-            await message.save();
-
-            io.to(`user:${userId}`).emit('message_deleted', {
-              messageId: message._id.toString(),
-              roomId: room._id.toString(),
-              deletedForEveryone: false,
-              deletedForUserId: userId
-            });
-            await emitUnreadCount(io, userId, room._id);
-          } catch (error) {
-            console.error('❌ Error deleting message:', error);
-            socket.emit('error_message', { message: 'Failed to delete message.' });
-          }
-        });
+        await emitUnreadCount(io, userId, room._id);
+      } catch (error) {
+        console.error('❌ Error deleting message:', error);
+        socket.emit('error_message', { message: 'Failed to delete message.' });
+      }
+    });
 
 
 
@@ -2096,28 +2061,6 @@ module.exports =
                 userId
               );
 
-              // Only mark the user offline after their LAST
-              // Socket.IO connection has disconnected. This keeps
-              // presence correct when the user has multiple tabs
-              // or devices open.
-              try {
-                await User.findByIdAndUpdate(
-                  userId,
-                  {
-                    $set: {
-                      isOnline: false,
-                      lastSeen: new Date()
-                    }
-                  },
-                  { new: false }
-                );
-              } catch (presenceError) {
-                console.error(
-                  '❌ Failed to persist offline status:',
-                  presenceError
-                );
-              }
-
               io.emit(
                 'user_online_status',
                 {
@@ -2132,4 +2075,4 @@ module.exports =
         );
       }
     );
-  };
+  }

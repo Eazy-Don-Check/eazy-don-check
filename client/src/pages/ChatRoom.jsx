@@ -70,7 +70,10 @@ import {
   Dumbbell,
   Church,
   Laptop,
-  WalletCards
+  WalletCards,
+  Settings,
+  Play,
+  Pause
 } from 'lucide-react';
 
 
@@ -196,6 +199,12 @@ export default function ChatRoom() {
   const [isUploadingVoice, setIsUploadingVoice] =
     useState(false);
 
+  // Compact WhatsApp-style voice-note player state.
+  const [playingVoiceId, setPlayingVoiceId] = useState(null);
+  const [voiceProgress, setVoiceProgress] = useState({});
+  const [voiceDurations, setVoiceDurations] = useState({});
+  const voiceAudioRefs = useRef({});
+
   const mediaRecorderRef = useRef(null);
   const voiceChunksRef = useRef([]);
   const recordingTimerRef = useRef(null);
@@ -241,8 +250,23 @@ export default function ChatRoom() {
   const [isJoiningRoom, setIsJoiningRoom] = useState(false);
   const [isLeavingRoom, setIsLeavingRoom] = useState(false);
   const [showRoomMenu, setShowRoomMenu] = useState(false);
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [messageSettingsOpen, setMessageSettingsOpen] = useState(false);
+  const [enterToSend, setEnterToSend] = useState(() => {
+    try {
+      return localStorage.getItem('eazy-don-check-enter-to-send') !== 'false';
+    } catch (_) {
+      return true;
+    }
+  });
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('eazy-don-check-enter-to-send', String(enterToSend));
+    } catch (_) {
+      // Ignore storage failures.
+    }
+  }, [enterToSend]);
 
 
   // =========================================================
@@ -272,6 +296,15 @@ export default function ChatRoom() {
   const initialConversationLoadRef =
     useRef(null);
 
+  /*
+   * Stores the exact conversation boundary that may be marked read
+   * after the initial history has actually been rendered and positioned.
+   * This prevents the history request itself from destroying the user's
+   * last-read position before the DOM has been scrolled to it.
+   */
+  const initialReadThroughRef =
+    useRef(null);
+
   const typingTimeoutRef =
     useRef(null);
 
@@ -282,6 +315,7 @@ export default function ChatRoom() {
   const activeRecipientIdRef = useRef(null);
   const chatModeRef = useRef(chatMode);
   const currentUserIdRef = useRef(null);
+  const messagesRef = useRef([]);
 
   const fileInputRef =
     useRef(null);
@@ -369,6 +403,10 @@ export default function ChatRoom() {
     chatModeRef.current = chatMode;
     currentUserIdRef.current = getId(user);
   }, [activeRoom, activeRecipient, chatMode, user, getId]);
+
+  useEffect(() => {
+    messagesRef.current = Array.isArray(messages) ? messages : [];
+  }, [messages]);
 
 
   const getRoomIsPrivate =
@@ -476,6 +514,121 @@ export default function ChatRoom() {
     );
 
 
+  const getAvatarUrl =
+    useCallback(
+      (member) => {
+        if (!member) return null;
+
+        const candidate =
+          member.avatar ||
+          member.photo ||
+          member.profilePicture ||
+          member.profile_picture ||
+          member.profile_image ||
+          member.profileImage ||
+          member.profilePictureUrl ||
+          member.avatarUrl ||
+          member.avatar_url ||
+          member.photoUrl ||
+          member.image ||
+          member.picture ||
+          member.user?.avatar ||
+          member.user?.photo ||
+          member.user?.profilePicture ||
+          member.user?.profile_picture ||
+          member.user?.profile_image ||
+          member.user?.profileImage ||
+          member.user?.profilePictureUrl ||
+          member.user?.avatarUrl ||
+          member.user?.avatar_url ||
+          member.user?.photoUrl ||
+          member.user?.image ||
+          member.user?.picture ||
+          null;
+
+        if (!candidate) return null;
+
+        return getAttachmentUrl(candidate);
+      },
+      [getAttachmentUrl]
+    );
+
+
+  const toggleVoiceNote = useCallback((messageId, url) => {
+    if (!messageId || !url) return;
+
+    const currentId = String(messageId);
+    const currentAudio = voiceAudioRefs.current[currentId];
+
+    if (!currentAudio) return;
+
+    Object.entries(voiceAudioRefs.current).forEach(([id, audio]) => {
+      if (id !== currentId && audio && !audio.paused) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+    });
+
+    if (currentAudio.paused) {
+      currentAudio.play().then(() => {
+        setPlayingVoiceId(currentId);
+      }).catch(() => {
+        setPlayingVoiceId(null);
+      });
+    } else {
+      currentAudio.pause();
+      setPlayingVoiceId(null);
+    }
+  }, []);
+
+  const handleVoiceTimeUpdate = useCallback((messageId, event) => {
+    const audio = event.currentTarget;
+    const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+    const current = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+
+    setVoiceProgress((previous) => ({
+      ...previous,
+      [String(messageId)]: duration > 0 ? (current / duration) * 100 : 0
+    }));
+
+    if (duration > 0) {
+      setVoiceDurations((previous) => ({
+        ...previous,
+        [String(messageId)]: duration
+      }));
+    }
+  }, []);
+
+  const handleVoiceLoadedMetadata = useCallback((messageId, event) => {
+    const duration = Number.isFinite(event.currentTarget.duration)
+      ? event.currentTarget.duration
+      : 0;
+
+    if (duration > 0) {
+      setVoiceDurations((previous) => ({
+        ...previous,
+        [String(messageId)]: duration
+      }));
+    }
+  }, []);
+
+  const handleVoiceEnded = useCallback((messageId) => {
+    const key = String(messageId);
+    setPlayingVoiceId((current) => current === key ? null : current);
+    setVoiceProgress((previous) => ({
+      ...previous,
+      [key]: 0
+    }));
+
+    const audio = voiceAudioRefs.current[key];
+    if (audio) audio.currentTime = 0;
+  }, []);
+
+  const formatVoiceDuration = useCallback((seconds) => {
+    const total = Math.max(0, Math.round(Number(seconds) || 0));
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+  }, []);
+
   const scrollToBottom =
     useCallback(() => {
 
@@ -493,7 +646,7 @@ export default function ChatRoom() {
 
 
   // =========================================================
-  // SCROLL
+  // SCROLL / INITIAL READ POSITION
   // =========================================================
 
   useEffect(() => {
@@ -504,41 +657,102 @@ export default function ChatRoom() {
     const anchorId =
       initialConversationAnchorRef.current;
 
-    if (anchorId) {
-      requestAnimationFrame(() => {
-        const escapedAnchorId =
-          typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
-            ? CSS.escape(String(anchorId))
-            : String(anchorId).replace(/["\\]/g, '\\$&');
-
-        const anchorElement =
-          document.querySelector(
-            `[data-message-id="${escapedAnchorId}"]`
-          );
-
-        if (anchorElement) {
-          anchorElement.scrollIntoView({
-            behavior: 'auto',
-            block: 'start'
-          });
-          initialConversationAnchorRef.current = null;
-          return;
-        }
-
-        // If the anchor is no longer in the loaded batch,
-        // fall back to the normal newest-message position.
-        scrollToBottom();
-        initialConversationAnchorRef.current = null;
-      });
+    if (!anchorId) {
+      scrollToBottom();
       return;
     }
 
-    scrollToBottom();
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 12;
+
+    const positionAtInitialBoundary = () => {
+      if (cancelled) {
+        return;
+      }
+
+      attempts += 1;
+
+      const escapedAnchorId =
+        typeof CSS !== 'undefined' &&
+        typeof CSS.escape === 'function'
+          ? CSS.escape(String(anchorId))
+          : String(anchorId).replace(/["\\]/g, '\\$&');
+
+      const anchorElement =
+        document.querySelector(
+          `[data-message-id="${escapedAnchorId}"]`
+        );
+
+      if (anchorElement) {
+        anchorElement.scrollIntoView({
+          behavior: 'auto',
+          block: 'start'
+        });
+
+        initialConversationAnchorRef.current = null;
+
+        /*
+         * Only after the anchor is in the DOM do we advance the read
+         * watermark. This keeps the last-read boundary intact during
+         * history loading and prevents a premature jump to the bottom.
+         */
+        const readBoundary =
+          initialReadThroughRef.current;
+
+        initialReadThroughRef.current = null;
+
+        if (
+          readBoundary?.roomId &&
+          readBoundary?.throughMessageId
+        ) {
+          lastMarkedRoomRef.current =
+            readBoundary.roomId;
+
+          Promise.resolve(
+            markRoomAsReadRef.current(
+              readBoundary.roomId,
+              readBoundary.throughMessageId
+            )
+          ).then(() => {
+            if (!cancelled) {
+              refreshUnreadCounts();
+            }
+          }).catch((error) => {
+            console.warn(
+              'Unable to advance chat read position:',
+              error
+            );
+          });
+        }
+
+        return;
+      }
+
+      if (attempts < maxAttempts) {
+        requestAnimationFrame(positionAtInitialBoundary);
+        return;
+      }
+
+      /*
+       * Do not silently jump to the newest message when a valid anchor is
+       * missing. That was the source of the apparent "starts from the
+       * beginning/bottom" behaviour. Keep the loaded history stable.
+       */
+      initialConversationAnchorRef.current = null;
+      initialReadThroughRef.current = null;
+    };
+
+    requestAnimationFrame(positionAtInitialBoundary);
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     messages,
-    scrollToBottom
+    scrollToBottom,
+    refreshUnreadCounts
   ]);
-
 
   // =========================================================
   // CLEAR FILE
@@ -728,79 +942,6 @@ export default function ChatRoom() {
     };
   }, []);
 
-  const getMediaAccessError = useCallback((error, { video = false } = {}) => {
-    const name = String(error?.name || '').toLowerCase();
-    const message = String(error?.message || '').toLowerCase();
-
-    const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-    const secureContext = typeof window === 'undefined' || window.isSecureContext || isLocalhost;
-
-    if (!secureContext) {
-      return 'Camera and microphone require HTTPS on a phone. Open EAZY DON CHECK through its HTTPS address instead of the 10.x.x.x Wi-Fi address.';
-    }
-
-    if (name === 'notallowederror' || name === 'securityerror') {
-      return `${video ? 'Camera and microphone' : 'Microphone'} permission was denied. Allow ${video ? 'camera and microphone' : 'microphone'} access in your browser settings, then try again.`;
-    }
-
-    if (name === 'notfounderror') {
-      return `No usable ${video ? 'camera or microphone' : 'microphone'} was found on this device.`;
-    }
-
-    if (name === 'notreadableerror' || name === 'aborterror') {
-      return `The ${video ? 'camera or microphone' : 'microphone'} is already in use or could not be opened. Close other apps using it and try again.`;
-    }
-
-    if (name === 'overconstrainederror') {
-      return `The device cannot satisfy the requested ${video ? 'camera or microphone' : 'microphone'} settings.`;
-    }
-
-    if (message.includes('secure context') || message.includes('only secure origins')) {
-      return 'Camera and microphone access requires a secure HTTPS connection.';
-    }
-
-    return `Unable to access your ${video ? 'camera and microphone' : 'microphone'}. Check browser permissions and try again.`;
-  }, []);
-
-  const requestMediaStream = useCallback(async (withVideo = false) => {
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      throw new Error('MEDIA_API_UNAVAILABLE');
-    }
-
-    const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-    const secureContext = typeof window === 'undefined' || window.isSecureContext || isLocalhost;
-
-    if (!secureContext) {
-      const error = new Error('Camera and microphone require HTTPS on a phone.');
-      error.name = 'InsecureContextError';
-      throw error;
-    }
-
-    return navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: Boolean(withVideo)
-    });
-  }, []);
-
-  const getIceServers = useCallback(async () => {
-    try {
-      const response = await apiClient.get('/webrtc/ice-servers');
-      const servers = response?.data?.iceServers;
-      if (Array.isArray(servers) && servers.length) {
-        return servers;
-      }
-    } catch (error) {
-      console.warn('WebRTC ICE server discovery failed. Falling back to public STUN servers.', error);
-    }
-
-    return [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
-    ];
-  }, []);
-
   const startVoiceRecording = useCallback(async () => {
     if (!socket || !isConnected || isUploadingVoice || isRecordingVoice) return;
 
@@ -808,20 +949,19 @@ export default function ChatRoom() {
     if (chatMode === 'direct' && !activeRecipient?._id) return;
 
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
-      setChatError('This browser does not provide microphone recording. Please use a current Chrome, Safari, Edge, or Firefox browser.');
+      setChatError('Voice recording is not supported by this browser.');
       return;
     }
 
     try {
-      const stream = await requestMediaStream(false);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       voiceStreamRef.current = stream;
       voiceChunksRef.current = [];
 
       const preferredMimeTypes = [
         'audio/webm;codecs=opus',
         'audio/webm',
-        'audio/ogg;codecs=opus',
-        'audio/mp4'
+        'audio/ogg;codecs=opus'
       ];
       const mimeType = preferredMimeTypes.find((type) =>
         MediaRecorder.isTypeSupported(type)
@@ -895,10 +1035,10 @@ export default function ChatRoom() {
       }, 1000);
     } catch (error) {
       console.error('Microphone access error:', error);
-      setChatError(getMediaAccessError(error, { video: false }));
+      setChatError('Microphone access was denied or unavailable. Please allow microphone access and try again.');
       stopVoiceStream();
     }
-  }, [socket, isConnected, isUploadingVoice, isRecordingVoice, chatMode, activeRoom, activeRecipient, uploadVoiceNote, stopVoiceStream, requestMediaStream, getMediaAccessError]);
+  }, [socket, isConnected, isUploadingVoice, isRecordingVoice, chatMode, activeRoom, activeRecipient, uploadVoiceNote, stopVoiceStream]);
 
   const stopVoiceRecording = useCallback(() => {
     if (!mediaRecorderRef.current) return;
@@ -976,12 +1116,75 @@ export default function ChatRoom() {
     }
   }, [stopCallRingtone]);
 
+  const getMediaAccessError = useCallback((error, { video = false } = {}) => {
+    const name = error?.name;
+
+    if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+      return video
+        ? 'Camera/microphone access was denied. Please allow camera and microphone access for EAZY DON CHECK and try again.'
+        : 'Microphone access was denied. Please allow microphone access for EAZY DON CHECK and try again.';
+    }
+
+    if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+      return video
+        ? 'No camera or microphone was found on this device.'
+        : 'No microphone was found on this device.';
+    }
+
+    if (name === 'NotReadableError' || name === 'TrackStartError') {
+      return 'Your camera or microphone is already being used by another application.';
+    }
+
+    if (name === 'SecurityError') {
+      return 'Camera and microphone access requires a secure HTTPS connection.';
+    }
+
+    return video
+      ? 'Unable to access your camera and microphone. Please check browser permissions and try again.'
+      : 'Unable to access your microphone. Please check browser permissions and try again.';
+  }, []);
+
+  const requestMediaStream = useCallback(async (withVideo = false) => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('MEDIA_DEVICES_UNAVAILABLE');
+    }
+
+    return navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      },
+      video: Boolean(withVideo)
+    });
+  }, []);
+
+  const getIceServers = useCallback(async () => {
+    try {
+      const response = await apiClient.get('/webrtc/ice-servers');
+      const servers = response?.data?.iceServers;
+      if (Array.isArray(servers) && servers.length) {
+        return servers;
+      }
+    } catch (error) {
+      console.warn('WebRTC ICE server discovery failed. Falling back to public STUN servers.', error);
+    }
+
+    return [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ];
+  }, []);
+
   // =========================================================
   // DIRECT CALL HELPERS
   // =========================================================
 
   const closePeerConnection = useCallback(() => {
     try {
+      peerConnectionRef.current?.getSenders?.().forEach((sender) => {
+        try { sender.replaceTrack?.(null); } catch (_) {}
+      });
       peerConnectionRef.current?.close();
     } catch (_) {}
     peerConnectionRef.current = null;
@@ -1005,6 +1208,14 @@ export default function ChatRoom() {
     if (notify && socket && callState?.peerId) {
       socket.emit('end_call', { targetUserId: callState.peerId, callId: callState.callId });
     }
+
+    if (remoteStreamRef.current) {
+      remoteStreamRef.current.getTracks().forEach((track) => {
+        try { track.stop(); } catch (_) {}
+      });
+      remoteStreamRef.current = null;
+    }
+
     closePeerConnection();
     stopLocalMedia();
     setCallState(null);
@@ -1047,7 +1258,9 @@ export default function ChatRoom() {
       }, 30500);
     } catch (error) {
       console.error('Call media error:', error);
-      setCallError(getMediaAccessError(error, { video: withVideo }));
+      setCallError(error?.message === 'MEDIA_DEVICES_UNAVAILABLE'
+        ? 'This browser does not support camera/microphone calls.'
+        : getMediaAccessError(error, { video: withVideo }));
     }
   }, [socket, isConnected, chatMode, activeRecipient, callState, getId, getDisplayName, startCallRingtone, stopCallRingtone, closePeerConnection, stopLocalMedia, requestMediaStream, getMediaAccessError]);
 
@@ -1073,24 +1286,61 @@ export default function ChatRoom() {
 
     peerConnectionRef.current = pc;
     const remoteStream = new MediaStream();
+    remoteStreamRef.current = remoteStream;
 
     if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => pc.addTrack(track, localStreamRef.current));
+      localStreamRef.current.getTracks().forEach((track) => {
+        pc.addTrack(track, localStreamRef.current);
+      });
     }
 
     pc.ontrack = (event) => {
-      event.streams[0]?.getTracks().forEach((track) => remoteStream.addTrack(track));
+      const incomingTracks = [];
+
+      if (event.streams?.[0]) {
+        incomingTracks.push(...event.streams[0].getTracks());
+      }
+
+      if (event.track) {
+        incomingTracks.push(event.track);
+      }
+
+      incomingTracks.forEach((track) => {
+        if (!track || remoteStream.getTracks().some((existing) => existing.id === track.id)) {
+          return;
+        }
+        remoteStream.addTrack(track);
+        console.log('[WebRTC] Remote track received:', {
+          kind: track.kind,
+          id: track.id,
+          readyState: track.readyState,
+          withVideo
+        });
+      });
+
       setCallState((previous) => previous ? { ...previous, remoteStream } : previous);
     };
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        socket.emit('ice_candidate', { targetUserId, callId, candidate: event.candidate });
+        socket.emit('ice_candidate', {
+          targetUserId,
+          callId,
+          candidate: event.candidate
+        });
       }
     };
 
+    pc.oniceconnectionstatechange = () => {
+      console.log('[WebRTC] ICE connection state:', pc.iceConnectionState);
+    };
+
     pc.onconnectionstatechange = () => {
-      if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) {
+      console.log('[WebRTC] Connection state:', pc.connectionState);
+
+      // A temporary "disconnected" state can recover, especially on mobile
+      // networks. Only failed/closed should transition the call to ended.
+      if (['failed', 'closed'].includes(pc.connectionState)) {
         setCallState((previous) => previous ? { ...previous, status: 'ended' } : previous);
       }
     };
@@ -1119,7 +1369,7 @@ export default function ChatRoom() {
       stopCallRingtone();
       if (callTimeoutRef.current) { clearTimeout(callTimeoutRef.current); callTimeoutRef.current = null; }
       try {
-        const pc = await createPeerConnection(peerId, callId, withVideo);
+        const pc = createPeerConnection(peerId, callId, withVideo);
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         socket.emit('webrtc_offer', { targetUserId: peerId, callId, offer, withVideo });
@@ -1137,7 +1387,7 @@ export default function ChatRoom() {
           localStreamRef.current = await requestMediaStream(withVideo);
           setCallState((previous) => previous ? { ...previous, localStream: localStreamRef.current } : previous);
         }
-        const pc = await createPeerConnection(callerId, callId, withVideo);
+        const pc = createPeerConnection(callerId, callId, withVideo);
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
@@ -1214,7 +1464,7 @@ export default function ChatRoom() {
       socket.off('call_ended', onCallEnded);
       socket.off('call_error', onCallError);
     };
-  }, [socket, isConnected, callState, createPeerConnection, endCall, startCallRingtone, stopCallRingtone, requestMediaStream, getMediaAccessError]);
+  }, [socket, isConnected, callState, createPeerConnection, endCall, startCallRingtone, stopCallRingtone, requestMediaStream]);
 
   useEffect(() => () => {
     clearInterval(recordingTimerRef.current);
@@ -1223,6 +1473,12 @@ export default function ChatRoom() {
     stopCallRingtone();
     closePeerConnection();
     stopLocalMedia();
+    if (remoteStreamRef.current) {
+      remoteStreamRef.current.getTracks().forEach((track) => {
+        try { track.stop(); } catch (_) {}
+      });
+      remoteStreamRef.current = null;
+    }
   }, [stopVoiceStream, stopCallRingtone, closePeerConnection, stopLocalMedia]);
 
   // =========================================================
@@ -1361,16 +1617,16 @@ export default function ChatRoom() {
 
     if (!roomSlug) {
 
-      // /chat is the CHANNELS/ROOMS LIST screen.
-      // Never auto-select the first room here; doing so makes clicking
-      // Channels immediately open an arbitrary room instead of showing
-      // the available rooms. A room is opened only after the user selects it.
+      // /chat is the Channels directory, not a conversation.
+      // Never auto-select the first room here. The user must
+      // explicitly choose a room before its conversation opens.
       setActiveRoom(null);
-      setMessages([]);
       setActiveRecipient(null);
+      setMessages([]);
       setTypingUsers({});
       setChatError('');
-
+      setShowRoomMenu(false);
+      lastMarkedRoomRef.current = null;
       return;
     }
 
@@ -1426,7 +1682,6 @@ export default function ChatRoom() {
     rooms,
     roomSlug,
     location.pathname,
-    location.state?.roomListOnly,
     getId
   ]);
 
@@ -1470,12 +1725,11 @@ export default function ChatRoom() {
       return;
     }
 
-    lastMarkedRoomRef.current =
-      roomId;
-
-    markRoomAsReadRef.current(
-      roomId
-    );
+    /*
+     * Do not mark the room read here. The history loader must first
+     * inspect read_by and establish the user's last-read boundary.
+     * It marks the room read only after the correct messages are loaded.
+     */
 
   }, [
     activeRoom?._id,
@@ -1644,174 +1898,155 @@ export default function ChatRoom() {
       );
     };
 
+    const fetchRoomHistoryFromLastRead = async () => {
+      const roomId = getId(activeRoom);
+
+      if (!roomId) {
+        return { messages: [], anchorId: null };
+      }
+
+      const pageSize = 50;
+      const stateResponse = await apiClient.get(
+        `/chat/rooms/${roomId}/messages`,
+        {
+          params: { page: 1, limit: pageSize }
+        }
+      );
+
+      const stateResult = stateResponse?.data || {};
+
+      if (!stateResult.success) {
+        throw new Error(
+          stateResult.error ||
+          stateResult.message ||
+          'Failed to load room message history.'
+        );
+      }
+
+      const latestMessages = Array.isArray(stateResult.data)
+        ? stateResult.data
+        : [];
+      const readState = stateResult.readState || {};
+      const firstUnreadId = readState.firstUnreadMessageId || null;
+      const lastReadId = readState.lastReadMessageId || null;
+      const unreadCount = Number(readState.unreadCount) || 0;
+
+      if (!firstUnreadId || !unreadCount) {
+        return {
+          messages: latestMessages,
+          anchorId: null
+        };
+      }
+
+      const aroundId = lastReadId || firstUnreadId;
+      const aroundResponse = await apiClient.get(
+        `/chat/rooms/${roomId}/messages`,
+        {
+          params: {
+            aroundMessageId: aroundId,
+            page: 1,
+            limit: 100
+          }
+        }
+      );
+
+      const aroundResult = aroundResponse?.data || {};
+
+      if (!aroundResult.success) {
+        throw new Error(
+          aroundResult.error ||
+          aroundResult.message ||
+          'Failed to load room messages from the last-read position.'
+        );
+      }
+
+      const anchoredMessages = Array.isArray(aroundResult.data)
+        ? aroundResult.data
+        : [];
+
+      return {
+        messages: anchoredMessages.length ? anchoredMessages : latestMessages,
+        anchorId: aroundId
+      };
+    };
+
     const fetchDirectHistoryFromLastRead = async () => {
       const recipientId = getId(activeRecipient);
 
       if (!recipientId) {
-        return {
-          messages: [],
-          roomId: null,
-          anchorId: null
-        };
+        return { messages: [], roomId: null, anchorId: null };
       }
 
-      const pageSize = 50;
-      const collectedNewestFirst = [];
-      let page = 1;
-      let totalPages = 1;
-      let earliestUnreadIndex = -1;
-      let discoveredRoomId = null;
+      const stateResponse = await apiClient.get(
+        `/chat/direct/${recipientId}`,
+        {
+          params: { page: 1, limit: 50 }
+        }
+      );
 
-      /*
-       * The direct endpoint is paginated newest-first internally.
-       * We therefore walk backwards through pages until we reach
-       * the first unread message. This makes the visible history
-       * begin at the same point the user last left the conversation,
-       * rather than at the beginning of the chat.
-       *
-       * A maximum page count protects the browser from an accidental
-       * infinite pagination response.
-       */
-      const MAX_HISTORY_PAGES = 100;
+      const stateResult = stateResponse?.data || {};
 
-      while (!cancelled && page <= totalPages && page <= MAX_HISTORY_PAGES) {
-        const response = await apiClient.get(
-          `/chat/direct/${recipientId}`,
-          {
-            params: {
-              page,
-              limit: pageSize
-            }
-          }
+      if (!stateResult.success) {
+        throw new Error(
+          stateResult.error ||
+          stateResult.message ||
+          'Failed to load direct message read state.'
         );
+      }
 
-        const result = response?.data || {};
+      const readState = stateResult.readState || {};
+      const latestMessages = Array.isArray(stateResult.data)
+        ? stateResult.data
+        : [];
 
-        if (!result.success) {
-          throw new Error(
-            result.error ||
-            result.message ||
-            'Failed to load direct message history.'
-          );
-        }
+      const roomId = latestMessages.reduce(
+        (found, message) =>
+          found || getId(message?.room) || getId(message?.roomId) || null,
+        null
+      );
 
-        const pageMessages =
-          Array.isArray(result.data)
-            ? result.data
-            : [];
+      const firstUnreadId = readState.firstUnreadMessageId || null;
+      const lastReadId = readState.lastReadMessageId || null;
+      const unreadCount = Number(readState.unreadCount) || 0;
 
-        if (!discoveredRoomId) {
-          discoveredRoomId =
-            getHistoryRoomId(pageMessages);
-        }
+      if (!firstUnreadId || !unreadCount) {
+        return { messages: latestMessages, roomId, anchorId: null };
+      }
 
-        if (!pageMessages.length) {
-          break;
-        }
-
-        /*
-         * The API returns each page oldest -> newest after reversing
-         * its MongoDB newest-first query. Keep pages in chronological
-         * order while accumulating them from newest toward older pages.
-         */
-        collectedNewestFirst.push(pageMessages);
-
-        /*
-         * Search this page from oldest -> newest. The first unread
-         * message in the complete conversation is the boundary we
-         * want. Because we are walking from newest pages toward older
-         * pages, continue until this page contains an unread message.
-         */
-        for (let index = 0; index < pageMessages.length; index += 1) {
-          if (!isMessageReadByCurrentUser(pageMessages[index])) {
-            earliestUnreadIndex = index;
-            break;
+      const aroundId = lastReadId || firstUnreadId;
+      const aroundResponse = await apiClient.get(
+        `/chat/direct/${recipientId}`,
+        {
+          params: {
+            aroundMessageId: aroundId,
+            page: 1,
+            limit: 100
           }
         }
+      );
 
-        const pagination = result.pagination || {};
-        totalPages = Math.max(
-          1,
-          Number(pagination.totalPages) || 1
+      const aroundResult = aroundResponse?.data || {};
+
+      if (!aroundResult.success) {
+        throw new Error(
+          aroundResult.error ||
+          aroundResult.message ||
+          'Failed to load direct messages from the last-read position.'
         );
-
-        if (earliestUnreadIndex !== -1) {
-          /*
-           * We have reached the page containing the oldest unread
-           * message. No older page is needed for the initial view.
-           */
-          break;
-        }
-
-        page += 1;
       }
 
-      /*
-       * collectedNewestFirst is currently [newest page, older page...].
-       * Reverse it back into chronological order.
-       */
-      const chronologicalPages =
-        [...collectedNewestFirst].reverse();
-
-      const chronologicalMessages =
-        chronologicalPages.flat();
-
-      if (!chronologicalMessages.length) {
-        return {
-          messages: [],
-          roomId: discoveredRoomId,
-          anchorId: null
-        };
-      }
-
-      /*
-       * Locate the first unread message in the chronological set.
-       * We intentionally include one message immediately before it,
-       * so the user has a clear last-read context instead of opening
-       * abruptly on the unread message itself.
-       */
-      const firstUnreadIndex =
-        chronologicalMessages.findIndex(
-          (message) =>
-            !isMessageReadByCurrentUser(message)
-        );
-
-      if (firstUnreadIndex === -1) {
-        /*
-         * No unread messages: preserve the normal chat behavior and
-         * show the newest page only, not the entire conversation.
-         */
-        const latestPage =
-          Array.isArray(collectedNewestFirst[0])
-            ? collectedNewestFirst[0]
-            : [];
-
-        return {
-          messages: latestPage,
-          roomId:
-            discoveredRoomId ||
-            getHistoryRoomId(latestPage),
-          anchorId: null
-        };
-      }
-
-      const contextIndex =
-        Math.max(0, firstUnreadIndex - 1);
+      const anchoredMessages = Array.isArray(aroundResult.data)
+        ? aroundResult.data
+        : [];
 
       return {
-        messages:
-          chronologicalMessages.slice(contextIndex),
-        roomId:
-          discoveredRoomId ||
-          getHistoryRoomId(chronologicalMessages),
-        /*
-         * Scroll to the last-read message. If there is no prior
-         * message, scroll to the first unread message.
-         */
-        anchorId:
-          chronologicalMessages[contextIndex]?._id ||
-          chronologicalMessages[firstUnreadIndex]?._id ||
+        messages: anchoredMessages.length ? anchoredMessages : latestMessages,
+        roomId: roomId || anchoredMessages.reduce(
+          (found, message) =>
+            found || getId(message?.room) || getId(message?.roomId) || null,
           null
+        ),
+        anchorId: aroundId
       };
     };
 
@@ -1842,32 +2077,14 @@ export default function ChatRoom() {
             )
           ) {
 
-            response =
-              await apiClient.get(
-                `/chat/rooms/${activeRoom._id}/messages`,
-                {
-                  params: {
-                    page: 1,
-                    limit: 50
-                  }
-                }
-              );
-
-            const result =
-              response?.data || {};
-
-            if (!result.success) {
-              throw new Error(
-                result.error ||
-                result.message ||
-                'Failed to load message history.'
-              );
-            }
+            const roomHistory =
+              await fetchRoomHistoryFromLastRead();
 
             historyMessages =
-              Array.isArray(result.data)
-                ? result.data
-                : [];
+              roomHistory.messages;
+
+            initialAnchorId =
+              roomHistory.anchorId;
 
           } else if (
             chatMode === 'direct' &&
@@ -1893,57 +2110,38 @@ export default function ChatRoom() {
             return;
           }
 
-          if (
-            !response &&
-            chatMode !== 'direct'
-          ) {
-            setMessages([]);
-            return;
-          }
-
           setMessages(historyMessages);
 
           /*
-           * Only the direct conversation uses the last-read anchor.
-           * Keep it in a ref so the generic message update effect
-           * does not repeatedly reposition the user's scroll.
+           * IMPORTANT: do not mark anything read here.
+           *
+           * The REST response is the authoritative source for the user's
+           * last-read boundary. We first render the exact batch around that
+           * boundary, scroll the DOM to it, and only then advance the read
+           * watermark. Otherwise opening a conversation would mark the whole
+           * loaded batch read before the browser has even positioned it.
            */
-          if (
+          initialConversationAnchorRef.current =
+            initialAnchorId;
+
+          const readRoomId =
             chatMode === 'direct'
-          ) {
-            initialConversationAnchorRef.current =
-              initialAnchorId;
+              ? (historyRoomId || getHistoryRoomId(historyMessages))
+              : getId(activeRoom);
 
-            if (!historyRoomId) {
-              historyRoomId =
-                getHistoryRoomId(historyMessages);
-            }
+          const throughMessage =
+            historyMessages[historyMessages.length - 1];
 
-            /*
-             * IMPORTANT:
-             * Mark the direct room read only AFTER we have determined
-             * the last-read boundary and loaded the correct messages.
-             */
-            if (
-              historyRoomId
-            ) {
-              lastMarkedRoomRef.current =
-                historyRoomId;
+          const throughMessageId =
+            getId(throughMessage);
 
-              try {
-                await markRoomAsReadRef.current(
-                  historyRoomId
-                );
-
-                await refreshUnreadCounts();
-              } catch (error) {
-                console.warn(
-                  'Unable to mark direct messages as read:',
-                  error
-                );
-              }
-            }
-          }
+          initialReadThroughRef.current =
+            readRoomId && throughMessageId && initialAnchorId
+              ? {
+                  roomId: readRoomId,
+                  throughMessageId
+                }
+              : null;
 
         } catch (error) {
 
@@ -2014,6 +2212,11 @@ export default function ChatRoom() {
 
     const currentUserId =
       getId(user);
+
+    const activeDirectRecipientId =
+      chatMode === 'direct'
+        ? getId(activeRecipient)
+        : null;
 
 
     // -------------------------------------------------------
@@ -2095,20 +2298,11 @@ export default function ChatRoom() {
          * The current room is open, so the
          * incoming message is immediately read.
          */
-        markRoomAsReadRef.current(
-          currentRoomId
-        );
-
-        /*
-         * Keep the socket-side read event too.
-         * This updates message read_by on the
-         * server for real-time state.
-         */
         socket.emit(
           'mark_messages_read',
           {
-            roomId:
-              currentRoomId
+            roomId: currentRoomId,
+            throughMessageId: getId(message)
           }
         );
       };
@@ -2180,15 +2374,11 @@ export default function ChatRoom() {
 
         if (directRoomId) {
 
-          markRoomAsReadRef.current(
-            directRoomId
-          );
-
           socket.emit(
             'mark_messages_read',
             {
-              roomId:
-                directRoomId
+              roomId: directRoomId,
+              throughMessageId: getId(message)
             }
           );
         }
@@ -2280,10 +2470,24 @@ export default function ChatRoom() {
       const currentRecipientId = getId(activeRecipient);
       const currentUserId = getId(user);
 
+      const activeDirectMessage =
+        chatMode === 'direct'
+          ? messagesRef.current.find((item) =>
+              getId(item?.room) || getId(item?.roomId)
+            )
+          : null;
+
+      const activeDirectRoomIdValue = getId(
+        activeDirectMessage?.room || activeDirectMessage?.roomId
+      );
+
       const belongs = chatMode === 'room'
         ? messageRoomId === currentRoomId
-        : ((senderId === currentRecipientId && recipientId === currentUserId) ||
-           (senderId === currentUserId && recipientId === currentRecipientId));
+        : (
+            (activeDirectRoomIdValue && messageRoomId === activeDirectRoomIdValue) ||
+            ((senderId === currentRecipientId && recipientId === currentUserId) ||
+             (senderId === currentUserId && recipientId === currentRecipientId))
+          );
 
       if (!belongs) return;
       setMessages((previous) => previous.map((item) =>
@@ -2333,6 +2537,14 @@ export default function ChatRoom() {
       'user_online_status',
       handleOnlineStatus
     );
+
+    // Ask the server for the recipient's current authoritative
+    // presence whenever a direct conversation is opened.
+    if (activeDirectRecipientId) {
+      socket.emit('get_user_online_status', {
+        userId: activeDirectRecipientId
+      });
+    }
 
     socket.on(
       'receive_room_message',
@@ -2467,17 +2679,22 @@ export default function ChatRoom() {
       const currentRoomId = activeRoomIdRef.current;
       const currentRecipientId = activeRecipientIdRef.current;
 
-      const eventRoomId = getId(payload.roomId ?? payload.room?._id ?? payload.room?.id);
+      const eventRoomId = getId(
+        payload.roomId ??
+        payload.room?._id ??
+        payload.room?.id
+      );
+
       const eventRecipientId = getId(
         payload.recipientId ??
         payload.targetUserId ??
         payload.toUserId
       );
 
-      // For direct messages the server sends the typing event to the
-      // RECIPIENT's personal socket room. Therefore recipientId is the
-      // current user (B), while typingUserId is the active conversation
-      // partner (A). We must validate both sides of that relationship.
+      // Room typing is scoped by room. For direct messages the server may
+      // deliver the event to the recipient's personal socket, so validate
+      // that the typing user is the active conversation partner and that any
+      // explicit recipient/target points at the current user.
       const isRelevant =
         mode === 'room'
           ? Boolean(currentRoomId && eventRoomId === currentRoomId)
@@ -2510,7 +2727,6 @@ export default function ChatRoom() {
         return;
       }
 
-      // Remove the entry rather than leaving a stale false-valued record.
       setTypingUsers((previous) => {
         if (!previous[typingUserId]) return previous;
         const next = { ...previous };
@@ -2526,7 +2742,6 @@ export default function ChatRoom() {
     };
   }, [socket, isConnected, getId]);
 
-
   // =========================================================
   // SELECT ROOM
   // =========================================================
@@ -2535,13 +2750,6 @@ export default function ChatRoom() {
     useCallback(
       async (room) => {
 
-        // Close any focused mobile search/input before opening the room.
-        // Otherwise the on-screen keyboard can remain open and temporarily
-        // push the header/composer upward until the phone Back button closes it.
-        if (typeof document !== 'undefined') {
-          document.activeElement?.blur?.();
-        }
-
         if (!room?._id) {
           return;
         }
@@ -2549,6 +2757,8 @@ export default function ChatRoom() {
         setChatError('');
         setMessages([]);
         setTypingUsers({});
+        setShowRoomMenu(false);
+        setMessageSettingsOpen(false);
 
         setChatMode('room');
 
@@ -2589,27 +2799,12 @@ export default function ChatRoom() {
         setActiveRoom(selectableRoom);
 
         /*
-         * Mark only this room as read.
-         *
-         * We intentionally DO NOT clear all
-         * message unread counts.
+         * Do not mark this room as read yet. The message-history loader
+         * first finds the last-read boundary, positions the conversation
+         * there, and only then marks the room as read.
          */
-        try {
-
-          await markRoomAsReadRef.current(
-            room._id
-          );
-
-          lastMarkedRoomRef.current =
-            getId(room);
-
-        } catch (error) {
-
-          console.warn(
-            'Unable to mark room as read:',
-            error
-          );
-        }
+        lastMarkedRoomRef.current = null;
+        initialConversationAnchorRef.current = null;
 
         navigate(
           room.slug
@@ -2633,12 +2828,6 @@ export default function ChatRoom() {
     useCallback(
       async (recipientUser) => {
 
-        // Close the mobile member/search input before switching to the
-        // conversation so the soft keyboard cannot resize the chat viewport.
-        if (typeof document !== 'undefined') {
-          document.activeElement?.blur?.();
-        }
-
         if (
           !recipientUser?._id
         ) {
@@ -2648,6 +2837,8 @@ export default function ChatRoom() {
         setChatError('');
         setMessages([]);
         setTypingUsers({});
+        setShowRoomMenu(false);
+        setMessageSettingsOpen(false);
 
         setChatMode('direct');
 
@@ -3306,81 +3497,62 @@ export default function ChatRoom() {
 
 
   // =========================================================
-  // MOBILE VIEWPORT LOCK
-  // =========================================================
-
-  useEffect(() => {
-    const html = document.documentElement;
-    const body = document.body;
-    const previousHtmlOverflow = html.style.overflow;
-    const previousBodyOverflow = body.style.overflow;
-    const previousBodyOverscroll = body.style.overscrollBehavior;
-
-    html.style.overflow = 'hidden';
-    body.style.overflow = 'hidden';
-    body.style.overscrollBehavior = 'none';
-
-    return () => {
-      html.style.overflow = previousHtmlOverflow;
-      body.style.overflow = previousBodyOverflow;
-      body.style.overscrollBehavior = previousBodyOverscroll;
-    };
-  }, []);
-
-  // =========================================================
   // RENDER
   // =========================================================
 
   return (
 
-    <div className="fixed inset-0 flex h-[100svh] w-full overflow-hidden overscroll-none bg-slate-50 dark:bg-dark-bg transition-colors duration-200">
+    <div className="fixed inset-0 w-full h-[100dvh] overflow-visible bg-[#efeae2] dark:bg-[#111b21] transition-colors duration-200 md:static md:w-auto md:h-auto md:min-h-screen md:overflow-visible md:flex">
 
-      <div className={"h-full w-full md:w-auto md:shrink-0 md:block " + (((chatMode === 'direct' && activeRecipient?._id) || (chatMode === 'room' && activeRoom?._id)) ? 'hidden' : 'block')}>
-        <Sidebar />
-      </div>
+      <Sidebar />
 
-      <main className="absolute inset-0 flex min-w-0 min-h-0 h-full w-full flex-col overflow-hidden md:static md:h-full md:w-auto md:flex-1">
+      <main className="flex-1 min-w-0 min-h-0 flex flex-col h-[100dvh] overflow-hidden md:h-screen md:min-h-0">
 
         {/* ===================================================
             HEADER
         =================================================== */}
 
-        <header className="relative z-40 h-16 min-h-16 w-full bg-white dark:bg-dark-card border-b border-slate-200 dark:border-dark-border px-1.5 sm:px-6 flex items-center justify-between shrink-0 overflow-visible">
+        <header className="sticky top-0 z-[90] h-[60px] min-h-[60px] bg-[#f0f2f5] dark:bg-[#202c33] border-b border-[#d1d7db] dark:border-[#2a3942] px-3 sm:px-4 flex items-center justify-between shrink-0 md:static md:h-[60px] md:min-h-[60px]">
 
-          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+          <div className="flex items-center gap-2 min-w-0 pl-12 md:pl-0">
 
-            {((chatMode === 'direct' && activeRecipient?._id) || (chatMode === 'room' && activeRoom?._id)) && (
+            {(chatMode === 'direct' && activeRecipient?._id) || (chatMode === 'room' && activeRoom?._id) ? (
               <button
                 type="button"
                 onClick={() => {
-                  document.activeElement?.blur?.();
-                  setShowMobileMenu(false);
-                  setShowRoomMenu(false);
-                  setActiveRecipient(null);
-                  setActiveRoom(null);
+                  if (chatMode === 'direct') {
+                    setActiveRecipient(null);
+                    setSidebarTab('dms');
+                    navigate('/messages');
+                  } else {
+                    setActiveRoom(null);
+                    setSidebarTab('channels');
+                    navigate('/chat');
+                  }
                   setMessages([]);
                   setTypingUsers({});
                   setChatError('');
-                  setSidebarTab(chatMode === 'direct' ? 'dms' : 'channels');
+                  setShowRoomMenu(false);
+                  setMessageSettingsOpen(false);
                   setSearchQuery('');
-                  setEditingMessageId(null);
-                  setReplyingTo(null);
-                  setMessageMenuId(null);
-                  setReactionPickerMessageId(null);
-                  clearSelectedFile();
-                  navigate(chatMode === 'direct' ? '/messages' : '/chat', { state: { roomListOnly: true } });
                 }}
-                className="md:hidden inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-700 dark:text-slate-200 active:bg-slate-100 dark:active:bg-dark-bg transition shrink-0"
-                title="Back"
-                aria-label="Back"
+                className="md:hidden relative z-[250] w-10 h-10 -ml-1 rounded-full bg-transparent text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/5 transition flex items-center justify-center shrink-0 touch-manipulation"
+                title={chatMode === 'direct' ? 'Back to Direct Messages' : 'Back to Channels'}
+                aria-label={chatMode === 'direct' ? 'Back to Direct Messages' : 'Back to Channels'}
               >
-                <ChevronLeft className="w-7 h-7 stroke-[2.25]" />
+                <ChevronLeft className="w-5 h-5" />
               </button>
-            )}
+            ) : null}
 
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full sm:rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-600 dark:text-brand-400 shrink-0">
+            <div className="w-10 h-10 rounded-full bg-[#dfe5e7] dark:bg-[#3b4a54] flex items-center justify-center text-slate-600 dark:text-slate-200 shrink-0 overflow-hidden">
 
-              {chatMode === 'room' ? (
+              {chatMode === 'direct' && (getAvatarUrl(activeRecipient)) ? (
+                <img
+                  src={getAvatarUrl(activeRecipient)}
+                  alt={getDisplayName(activeRecipient)}
+                  className="w-full h-full object-cover"
+                />
+              ) : chatMode === 'room' ? (
 
                 getRoomIsPrivate(
                   activeRoom
@@ -3404,7 +3576,7 @@ export default function ChatRoom() {
 
             <div className="min-w-0">
 
-              <h1 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <h1 className="text-[15px] font-semibold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
 
                 <span className="truncate">
 
@@ -3423,7 +3595,7 @@ export default function ChatRoom() {
                 </span>
 
                 <span
-                  className={`inline-block w-2 h-2 rounded-full shrink-0 ${
+                  className={`hidden sm:inline-block w-2 h-2 rounded-full shrink-0 ${
                     isConnected
                       ? 'bg-emerald-500'
                       : 'bg-rose-500'
@@ -3433,7 +3605,7 @@ export default function ChatRoom() {
               </h1>
 
 
-              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+              <p className="text-[11px] text-[#667781] dark:text-[#8696a0] truncate">
 
                 {chatMode ===
                 'room'
@@ -3447,7 +3619,14 @@ export default function ChatRoom() {
                         : 'Public Channel'
                     )
 
-                  : 'Direct Conversation'}
+                  : (
+                      isConnected &&
+                      Boolean(
+                        onlineUserMap[getId(activeRecipient)]
+                      )
+                        ? 'Online'
+                        : 'Offline'
+                    )}
 
               </p>
 
@@ -3456,33 +3635,46 @@ export default function ChatRoom() {
           </div>
 
 
-          <div className="hidden md:flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
 
-            {isConnected ? (
+            {(() => {
+              const recipientIsOnline =
+                chatMode === 'direct'
+                  ? Boolean(
+                      onlineUserMap[getId(activeRecipient)]
+                    )
+                  : true;
 
-              <>
+              const conversationOnline =
+                isConnected &&
+                recipientIsOnline;
 
-                <Wifi className="w-3.5 h-3.5 text-emerald-500" />
+              return conversationOnline ? (
 
-                <span className="hidden sm:inline text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                  Online
-                </span>
+                <>
 
-              </>
+                  <Wifi className="w-3.5 h-3.5 text-emerald-500" />
 
-            ) : (
+                  <span className="hidden sm:inline text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                    {chatMode === 'direct' ? 'Online' : 'Connected'}
+                  </span>
 
-              <>
+                </>
 
-                <WifiOff className="w-3.5 h-3.5 text-rose-500" />
+              ) : (
 
-                <span className="hidden sm:inline text-[10px] font-semibold text-rose-600 dark:text-rose-400">
-                  Offline
-                </span>
+                <>
 
-              </>
+                  <WifiOff className="w-3.5 h-3.5 text-rose-500" />
 
-            )}
+                  <span className="hidden sm:inline text-[10px] font-semibold text-rose-600 dark:text-rose-400">
+                    {chatMode === 'direct' ? 'Offline' : 'Offline'}
+                  </span>
+
+                </>
+
+              );
+            })()}
 
           </div>
 
@@ -3492,7 +3684,7 @@ export default function ChatRoom() {
                 type="button"
                 onClick={() => startDirectCall(false)}
                 disabled={!isConnected || Boolean(callState)}
-                className="w-9 h-9 rounded-full text-slate-600 dark:text-slate-300 hover:text-brand-500 active:bg-slate-100 dark:active:bg-dark-bg disabled:opacity-40 transition flex items-center justify-center"
+                className="w-10 h-10 rounded-full border-0 bg-transparent text-slate-600 dark:text-slate-300 hover:text-brand-500 hover:border-brand-400 disabled:opacity-40 transition flex items-center justify-center"
                 title="Voice call"
               >
                 <Phone className="w-4 h-4" />
@@ -3501,7 +3693,7 @@ export default function ChatRoom() {
                 type="button"
                 onClick={() => startDirectCall(true)}
                 disabled={!isConnected || Boolean(callState)}
-                className="w-9 h-9 rounded-full text-slate-600 dark:text-slate-300 hover:text-brand-500 active:bg-slate-100 dark:active:bg-dark-bg disabled:opacity-40 transition flex items-center justify-center"
+                className="w-10 h-10 rounded-full border-0 bg-transparent text-slate-600 dark:text-slate-300 hover:text-brand-500 hover:border-brand-400 disabled:opacity-40 transition flex items-center justify-center"
                 title="Video call"
               >
                 <Video className="w-4 h-4" />
@@ -3509,62 +3701,115 @@ export default function ChatRoom() {
             </div>
           )}
 
-          {chatMode === 'room' && !isSuperAdmin && activeRoom?.isJoined !== false && activeRoom?._id && (
-            <div className="relative hidden md:block">
-              <button type="button" onClick={() => setShowRoomMenu((previous) => !previous)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-dark-bg text-slate-500 dark:text-slate-400" title="Room options">
-                <MoreVertical className="w-4 h-4" />
+          {chatMode === 'direct' && activeRecipient?._id && (
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowRoomMenu((previous) => !previous)}
+                className="w-10 h-10 rounded-full bg-transparent text-[#54656f] dark:text-[#aebac1] hover:bg-black/5 dark:hover:bg-white/5 flex items-center justify-center touch-manipulation"
+                title="Chat options"
+                aria-label="Chat options"
+              >
+                <MoreVertical className="w-5 h-5" />
               </button>
               {showRoomMenu && (
-                <div className="absolute right-0 top-10 z-40 w-48 rounded-xl border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card shadow-xl p-1">
-                  {getId(activeRoom?.created_by) === getId(user) ? (
-                    <div className="px-3 py-2.5 text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">You created this room. Transfer ownership before leaving.</div>
-                  ) : (
-                    <button type="button" onClick={() => { setShowRoomMenu(false); setLeaveConfirmOpen(true); }} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-500/10 text-left">
-                      <LogOut className="w-4 h-4" /> Leave Room
-                    </button>
+                <div className="absolute right-0 top-11 z-[120] w-60 rounded-lg border border-slate-200 dark:border-[#2a3942] bg-white dark:bg-[#233138] shadow-2xl p-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMessageSettingsOpen((previous) => !previous);
+                    }}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#2a3942] text-left"
+                  >
+                    <span className="flex items-center gap-2"><Settings className="w-4 h-4" /> Message settings</span>
+                    <ChevronRight className={`w-3.5 h-3.5 transition-transform ${messageSettingsOpen ? 'rotate-90' : ''}`} />
+                  </button>
+                  {messageSettingsOpen && (
+                    <div className="mx-1 mb-1 rounded-lg bg-slate-50 dark:bg-[#202c33] border border-slate-200 dark:border-[#2a3942] p-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setEnterToSend((previous) => !previous)}
+                        className="w-full flex items-center justify-between gap-3 text-left"
+                      >
+                        <span>
+                          <span className="block text-[11px] font-semibold text-slate-700 dark:text-slate-200">Enter to send</span>
+                          <span className="block mt-0.5 text-[9px] text-slate-500 dark:text-slate-400">Press Enter to send a message</span>
+                        </span>
+                        <span className={`relative w-9 h-5 rounded-full transition ${enterToSend ? 'bg-[#1f4f8f]' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition ${enterToSend ? 'left-[18px]' : 'left-0.5'}`} />
+                        </span>
+                      </button>
+                    </div>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRoomMenu(false);
+                      setMessageSettingsOpen(false);
+                      setActiveRecipient(null);
+                      setMessages([]);
+                      setTypingUsers({});
+                      setSidebarTab('dms');
+                      navigate('/messages');
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#2a3942] text-left"
+                  >
+                    <ChevronLeft className="w-4 h-4" /> Back to Direct Messages
+                  </button>
                 </div>
               )}
             </div>
           )}
 
-          {((chatMode === 'direct' && activeRecipient?._id) || (chatMode === 'room' && activeRoom?._id)) && (
-            <div className="relative md:hidden shrink-0">
+          {chatMode === 'room' && activeRoom?._id && (
+            <div className="relative">
               <button
                 type="button"
-                onClick={() => setShowMobileMenu((previous) => !previous)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-600 dark:text-slate-300 active:bg-slate-100 dark:active:bg-dark-bg transition"
-                title="More options"
-                aria-label="More options"
-                aria-expanded={showMobileMenu}
+                onClick={() => setShowRoomMenu((previous) => !previous)}
+                className="w-10 h-10 rounded-full border-0 bg-transparent hover:bg-slate-100 dark:hover:bg-dark-bg text-slate-700 dark:text-white shadow-sm flex items-center justify-center touch-manipulation"
+                title="Chat options"
+                aria-label="Chat options"
               >
-                <MoreVertical className="w-6 h-6" />
+                <MoreVertical className="w-5 h-5" />
               </button>
-
-              {showMobileMenu && (
-                <div className="absolute right-0 top-11 z-[70] w-48 rounded-xl border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card shadow-2xl py-1 overflow-hidden">
+              {showRoomMenu && (
+                <div className="absolute right-0 top-11 z-[120] w-60 rounded-xl border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card shadow-2xl p-1">
                   <button
                     type="button"
                     onClick={() => {
-                      setShowMobileMenu(false);
-                      setInputMessage('');
+                      setMessageSettingsOpen((previous) => !previous);
                     }}
-                    className="w-full px-4 py-3 text-left text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-dark-bg"
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-dark-bg text-left"
                   >
-                    Clear message box
+                    <span className="flex items-center gap-2"><Settings className="w-4 h-4" /> Message settings</span>
+                    <ChevronRight className={`w-3.5 h-3.5 transition-transform ${messageSettingsOpen ? 'rotate-90' : ''}`} />
                   </button>
-                  {chatMode === 'room' && !isSuperAdmin && activeRoom?._id && activeRoom?.isJoined !== false && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowMobileMenu(false);
-                        setLeaveConfirmOpen(true);
-                      }}
-                      className="w-full px-4 py-3 text-left text-xs font-semibold text-rose-600 hover:bg-rose-500/10"
-                    >
-                      Leave room
-                    </button>
+                  {messageSettingsOpen && (
+                    <div className="mx-1 mb-1 rounded-lg bg-slate-50 dark:bg-[#202c33] border border-slate-200 dark:border-dark-border p-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setEnterToSend((previous) => !previous)}
+                        className="w-full flex items-center justify-between gap-3 text-left"
+                      >
+                        <span>
+                          <span className="block text-[11px] font-semibold text-slate-700 dark:text-slate-200">Enter to send</span>
+                          <span className="block mt-0.5 text-[9px] text-slate-500 dark:text-slate-400">Press Enter to send a message</span>
+                        </span>
+                        <span className={`relative w-9 h-5 rounded-full transition ${enterToSend ? 'bg-[#1f4f8f]' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition ${enterToSend ? 'left-[18px]' : 'left-0.5'}`} />
+                        </span>
+                      </button>
+                    </div>
                   )}
+                  {isSuperAdmin ? (
+                    <div className="px-3 py-2.5 text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">Super Admin access: room management is available without leaving the channel.</div>
+                  ) : getId(activeRoom?.created_by) === getId(user) ? (
+                    <div className="px-3 py-2.5 text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">You created this room. Transfer ownership before leaving.</div>
+                  ) : activeRoom?.isJoined !== false ? (
+                    <button type="button" onClick={() => { setShowRoomMenu(false); setLeaveConfirmOpen(true); }} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-500/10 text-left">
+                      <LogOut className="w-4 h-4" /> Leave Room
+                    </button>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -3577,40 +3822,38 @@ export default function ChatRoom() {
             WORKSPACE
         =================================================== */}
 
-        <div className="flex-1 min-h-0 flex overflow-hidden">
+        <div className="flex-1 min-h-0 flex overflow-hidden md:min-h-0 bg-[#efeae2] dark:bg-[#111b21]">
 
 
           {/* =================================================
               CHAT NAV
           ================================================= */}
 
-          <div className="w-72 bg-white dark:bg-dark-card border-r border-slate-200 dark:border-dark-border hidden md:flex flex-col p-4 shrink-0">
+          <div className="w-[300px] lg:w-[320px] bg-white dark:bg-[#111b21] border-r border-[#d1d7db] dark:border-[#2a3942] hidden md:flex flex-col p-0 shrink-0">
 
 
             {/* TABS */}
 
-            <div className="flex rounded-lg bg-slate-100 dark:bg-dark-bg p-1 mb-4 border border-slate-200 dark:border-dark-border">
+            <div className="flex rounded-none bg-[#f0f2f5] dark:bg-[#202c33] p-1 mb-0 border-b border-[#d1d7db] dark:border-[#2a3942]">
 
               <button
                 type="button"
                 onClick={() => {
 
-                  // Channels always means the room-list screen.
                   setSidebarTab(
                     'channels'
                   );
 
                   setSearchQuery('');
+
                   setActiveRoom(null);
+                  setActiveRecipient(null);
                   setMessages([]);
                   setTypingUsers({});
-                  setChatError('');
-
-                  if (location.pathname !== '/chat') {
-                    navigate('/chat', { state: { roomListOnly: true } });
-                  }
+                  setShowRoomMenu(false);
+                  navigate('/chat');
                 }}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition ${
+                className={`flex-1 py-2.5 text-xs font-semibold rounded-md transition ${
                   sidebarTab ===
                   'channels'
 
@@ -3637,7 +3880,7 @@ export default function ChatRoom() {
                     '/messages'
                   );
                 }}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition ${
+                className={`flex-1 py-2.5 text-xs font-semibold rounded-md transition ${
                   sidebarTab === 'dms'
 
                     ? 'bg-white dark:bg-dark-card text-brand-600 dark:text-brand-400 shadow-sm'
@@ -3653,7 +3896,7 @@ export default function ChatRoom() {
 
             {/* SEARCH */}
 
-            <div className="mb-3">
+            <div className="px-3 py-2">
 
               <div className="relative">
 
@@ -3678,7 +3921,7 @@ export default function ChatRoom() {
                         .value
                     )
                   }
-                  className="w-full bg-slate-100 dark:bg-dark-bg border border-slate-200 dark:border-dark-border rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-brand-500"
+                  className="w-full bg-[#f0f2f5] dark:bg-[#202c33] border border-transparent rounded-lg pl-9 pr-3 py-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-brand-500"
                 />
 
               </div>
@@ -3784,12 +4027,12 @@ export default function ChatRoom() {
                               room
                             )
                           }
-                          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors text-left ${
+                          className={`w-full flex items-center justify-between px-3 py-3 rounded-none text-xs font-semibold transition-colors text-left border-b border-slate-100 dark:border-[#202c33] ${
                             isActive
 
-                              ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20'
+                              ? 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef]'
 
-                              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-dark-bg/50 hover:text-slate-900 dark:hover:text-slate-200'
+                              : 'text-slate-700 dark:text-[#e9edef] hover:bg-[#f5f6f6] dark:hover:bg-[#202c33]'
                           }`}
                         >
 
@@ -3939,12 +4182,12 @@ export default function ChatRoom() {
                               member
                             )
                           }
-                          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors text-left ${
+                          className={`w-full flex items-center justify-between px-3 py-3 rounded-none text-xs font-semibold transition-colors text-left border-b border-slate-100 dark:border-[#202c33] ${
                             isActive
 
-                              ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20'
+                              ? 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef]'
 
-                              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-dark-bg/50 hover:text-slate-900 dark:hover:text-slate-200'
+                              : 'text-slate-700 dark:text-[#e9edef] hover:bg-[#f5f6f6] dark:hover:bg-[#202c33]'
                           }`}
                         >
 
@@ -3952,11 +4195,11 @@ export default function ChatRoom() {
 
                             <div className="relative shrink-0">
 
-                              {member.avatar ? (
+                              {getAvatarUrl(member) ? (
 
                                 <img
                                   src={
-                                    member.avatar
+                                    getAvatarUrl(member)
                                   }
                                   alt={
                                     displayName
@@ -4033,27 +4276,25 @@ export default function ChatRoom() {
               navigator here instead of trying to squeeze the 18rem
               desktop sidebar beside the message workspace.
           ================================================= */}
-          <div className={`md:hidden shrink-0 bg-white dark:bg-dark-card border-b border-slate-200 dark:border-dark-border p-3 ${
-            (chatMode === 'direct' && activeRecipient?._id) ||
-            (chatMode === 'room' && activeRoom?._id)
+          <div className={`md:hidden shrink-0 bg-white dark:bg-[#111b21] border-r border-[#d1d7db] dark:border-[#2a3942] p-0 ${
+            (chatMode === 'direct' && activeRecipient?._id) || (chatMode === 'room' && activeRoom?._id)
               ? 'hidden'
               : 'block'
           }`}>
 
-            <div className="flex rounded-xl bg-slate-100 dark:bg-dark-bg p-1 border border-slate-200 dark:border-dark-border">
+            <div className="flex rounded-none bg-[#f0f2f5] dark:bg-[#202c33] p-1 border-b border-[#d1d7db] dark:border-[#2a3942]">
               <button
                 type="button"
                 onClick={() => {
-                  // Channels is the ROOM LIST screen, not a room itself.
-                  // Always return to /chat and clear the active room.
                   setSidebarTab('channels');
                   setSearchQuery('');
                   setActiveRoom(null);
+                  setActiveRecipient(null);
                   setMessages([]);
                   setTypingUsers({});
-                  setChatError('');
+                  setShowRoomMenu(false);
                   if (location.pathname !== '/chat') {
-                    navigate('/chat', { state: { roomListOnly: true } });
+                    navigate('/chat');
                   }
                 }}
                 className={`flex-1 min-h-10 rounded-lg text-xs font-bold transition ${
@@ -4084,14 +4325,14 @@ export default function ChatRoom() {
               </button>
             </div>
 
-            <div className="mt-3 relative">
+            <div className="px-3 py-2 relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder={sidebarTab === 'channels' ? 'Search channels...' : 'Search members...'}
-                className="w-full h-9 bg-slate-100 dark:bg-dark-bg border border-slate-200 dark:border-dark-border rounded-lg pl-9 pr-3 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-brand-500"
+                className="w-full h-10 bg-[#f0f2f5] dark:bg-[#202c33] border border-transparent rounded-lg pl-9 pr-3 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-brand-500"
               />
             </div>
 
@@ -4131,22 +4372,22 @@ export default function ChatRoom() {
                         type="button"
                         key={memberId}
                         onClick={() => handleUserSelect(member)}
-                        className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-left transition ${
+                        className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-none text-left transition border-b border-slate-100 dark:border-[#202c33] ${
                           isActive
-                            ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20'
+                            ? 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef]'
                             : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-dark-bg/60 border border-transparent'
                         }`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <div className="relative shrink-0">
-                            {member.avatar ? (
+                            {getAvatarUrl(member) ? (
                               <img
-                                src={member.avatar}
+                                src={getAvatarUrl(member)}
                                 alt={displayName}
-                                className="w-9 h-9 rounded-full object-cover"
+                                className="w-11 h-11 rounded-full object-cover"
                               />
                             ) : (
-                              <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-700 dark:text-slate-300">
+                              <div className="w-11 h-11 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-700 dark:text-slate-300">
                                 {displayName.charAt(0).toUpperCase()}
                               </div>
                             )}
@@ -4196,7 +4437,7 @@ export default function ChatRoom() {
                         onClick={() => handleRoomSelect(room)}
                         className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-xs font-semibold text-left transition ${
                           isActive
-                            ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20'
+                            ? 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef]'
                             : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-dark-bg/60 border border-transparent'
                         }`}
                       >
@@ -4224,7 +4465,7 @@ export default function ChatRoom() {
               MESSAGE WORKSPACE
           ================================================= */}
 
-          <div className="flex-1 min-w-0 min-h-0 flex flex-col bg-slate-50 dark:bg-dark-bg overflow-hidden">
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col bg-[#efeae2] dark:bg-[#0b141a] overflow-hidden md:min-h-0">
 
 
             {/* ERROR */}
@@ -4263,9 +4504,9 @@ export default function ChatRoom() {
             ================================================= */}
 
             <div
-              className="relative flex-1 min-h-0 overflow-hidden"
+              className="relative flex-1 min-h-0 overflow-hidden md:min-h-0"
               style={{
-                backgroundImage: 'radial-gradient(circle at 15% 20%, rgba(245,158,11,0.07) 0, transparent 28%), radial-gradient(circle at 85% 80%, rgba(124,58,237,0.06) 0, transparent 30%), repeating-linear-gradient(135deg, rgba(15,23,42,0.025) 0px, rgba(15,23,42,0.025) 1px, transparent 1px, transparent 14px)'
+                backgroundImage: 'radial-gradient(circle at 15% 20%, rgba(37,99,235,0.10) 0, transparent 28%), radial-gradient(circle at 85% 80%, rgba(59,130,246,0.08) 0, transparent 30%), repeating-linear-gradient(135deg, rgba(15,23,42,0.035) 0px, rgba(15,23,42,0.035) 1px, transparent 1px, transparent 14px)'
               }}
             >
               {/* Fixed watermark: multiple message icons + EAZY DON CHECK marks.
@@ -4274,7 +4515,7 @@ export default function ChatRoom() {
                 className="pointer-events-none absolute inset-0 z-0 overflow-hidden select-none"
                 aria-hidden="true"
               >
-                <div className="absolute inset-0 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-10 sm:gap-14 place-items-center opacity-[0.055] rotate-[-12deg] scale-110">
+                <div className="absolute inset-0 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-10 sm:gap-14 place-items-center opacity-[0.065] rotate-[-12deg] scale-110">
                   {Array.from({ length: 16 }).map((_, watermarkIndex) => (
                     <div
                       key={`watermark-${watermarkIndex}`}
@@ -4290,7 +4531,7 @@ export default function ChatRoom() {
               </div>
 
               {/* Only this element scrolls. The watermark above remains fixed. */}
-              <div className="relative z-10 h-full min-h-0 overflow-y-auto overscroll-contain overscroll-x-none touch-pan-y p-3 sm:p-6 space-y-4">
+              <div className="relative z-10 h-full overflow-y-auto px-3 py-4 sm:px-6 space-y-2.5">
                 <div className="relative z-10 flex flex-col space-y-4">
 
               {isLoadingMessages ? (
@@ -4390,6 +4631,26 @@ export default function ChatRoom() {
                         msg.senderId
                       );
 
+                    /*
+                     * Some message payloads contain only senderId or a
+                     * minimal sender object. Resolve that ID against the
+                     * already-loaded user list/current user/active recipient
+                     * so real profile photos are still displayed.
+                     */
+                    const resolvedSender =
+                      getAvatarUrl(senderObj)
+                        ? senderObj
+                        : (senderId === getId(user)
+                            ? user
+                            : (senderId === getId(activeRecipient)
+                                ? activeRecipient
+                                : usersList.find(
+                                    (member) => getId(member) === senderId
+                                  ) || senderObj));
+
+                    const senderAvatarUrl =
+                      getAvatarUrl(resolvedSender);
+
                     const currentUserId =
                       getId(user);
 
@@ -4428,7 +4689,7 @@ export default function ChatRoom() {
 
                     const senderName =
                       getDisplayName(
-                        senderObj
+                        resolvedSender
                       );
 
                     return (
@@ -4450,40 +4711,43 @@ export default function ChatRoom() {
                         } space-y-1`}
                       >
 
-                        <div className="flex items-center gap-2 px-1">
+                        <div className={`flex items-end gap-2 w-full ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
+                          <div className="w-7 h-7 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-[#2a3942] shrink-0 flex items-center justify-center self-end mb-1">
+                            {senderAvatarUrl ? (
+                              <img
+                                src={senderAvatarUrl}
+                                alt={senderName}
+                                className="w-full h-full object-cover"
+                                onError={(event) => {
+                                  event.currentTarget.style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                                {senderName.charAt(0).toUpperCase()}
+                              </span>
+                            )}
+                          </div>
 
-                          <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
-
-                            {isOwnMessage
-                              ? 'You'
-                              : senderName}
-
-                          </span>
-
-                          <span className="text-[10px] text-slate-400">
-
-                            {msg.createdAt
-                              ? new Date(
-                                  msg.createdAt
-                                ).toLocaleTimeString(
-                                  [],
-                                  {
-                                    hour: '2-digit',
-                                    minute:
-                                      '2-digit'
-                                  }
-                                )
-                              : ''}
-
-                          </span>
-
-                        </div>
-
-                        <div className={`flex items-center gap-1 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
+                          <div className="min-w-0 max-w-[82%] sm:max-w-[70%] flex flex-col gap-1">
+                            <div className={`flex items-center gap-1.5 px-1 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                              <span className={`${chatMode === 'room' && !isOwnMessage ? 'inline' : 'hidden'} text-[10px] font-semibold text-[#667781] dark:text-[#8696a0] max-w-[160px] truncate`}>
+                                {isOwnMessage ? 'You' : senderName}
+                              </span>
+                              <span className="text-[10px] text-slate-400">
+                                {msg.createdAt
+                                  ? new Date(msg.createdAt).toLocaleTimeString([], {
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })
+                                  : ''}
+                              </span>
+                            </div>
+                        <div className={`relative z-20 flex items-center gap-1 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
                           <button
                             type="button"
                             onClick={() => beginReplyMessage(msg)}
-                            className="w-7 h-7 rounded-full text-slate-400 hover:text-brand-500 hover:bg-white dark:hover:bg-dark-card border border-transparent hover:border-slate-200 dark:hover:border-dark-border transition flex items-center justify-center"
+                            className="w-8 h-8 rounded-full text-slate-400 hover:text-brand-500 hover:bg-white dark:hover:bg-dark-card border border-slate-200/50 dark:border-dark-border/50 sm:border-transparent transition flex items-center justify-center touch-manipulation"
                             title="Reply to this message"
                           >
                             <Reply className="w-3.5 h-3.5" />
@@ -4492,7 +4756,7 @@ export default function ChatRoom() {
                             <button
                               type="button"
                               onClick={() => setMessageMenuId((previous) => previous === msg._id ? null : msg._id)}
-                              className="w-7 h-7 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-white dark:hover:bg-dark-card border border-transparent hover:border-slate-200 dark:hover:border-dark-border transition flex items-center justify-center"
+                              className="w-8 h-8 rounded-full text-slate-500 dark:text-slate-300 bg-white/90 dark:bg-[#202c33] border border-slate-200 dark:border-[#2a3942] shadow-sm hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-50 dark:hover:bg-dark-bg transition flex items-center justify-center touch-manipulation"
                               title="Message options"
                             >
                               <MoreVertical className="w-3.5 h-3.5" />
@@ -4514,12 +4778,12 @@ export default function ChatRoom() {
                         </div>
 
                         <div
-                          className={`max-w-md lg:max-w-xl px-4 py-3 rounded-2xl text-xs leading-relaxed space-y-2 shadow-sm ${
+                          className={`max-w-full px-3 py-2 rounded-lg text-[13px] leading-relaxed space-y-2 shadow-sm ${
                             isSystemMessage
                               ? 'bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300'
                               : isOwnMessage
-                                ? 'bg-brand-600 text-white rounded-br-none'
-                                : 'bg-white dark:bg-dark-card border border-slate-200 dark:border-dark-border text-slate-800 dark:text-slate-200 rounded-bl-none'
+                                ? 'bg-[#1f4f8f] dark:bg-[#173f73] text-white rounded-tr-none'
+                                : 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-tl-none'
                           }`}
                         >
 
@@ -4564,20 +4828,62 @@ export default function ChatRoom() {
                                     fileType ===
                                     'audio'
                                   ) {
+                                    const voiceId = `${msg._id || index}-voice-${attachmentIndex}`;
+                                    const voiceProgressValue = Number(voiceProgress[String(voiceId)] || 0);
+                                    const voiceDuration =
+                                      voiceDurations[String(voiceId)] ||
+                                      (typeof attachment === 'object' ? Number(attachment.duration) || 0 : 0);
+                                    const isVoicePlaying = playingVoiceId === String(voiceId);
+
                                     return (
                                       <div
-                                        key={attachmentIndex}
-                                        className={`rounded-xl p-2 ${isOwnMessage ? 'bg-white/10' : 'bg-slate-100 dark:bg-dark-bg'}`}
+                                        key={voiceId}
+                                        className={`w-[220px] max-w-[70vw] rounded-2xl px-2.5 py-2 ${isOwnMessage ? 'bg-white/10' : 'bg-slate-100 dark:bg-dark-bg'}`}
                                       >
+                                        <audio
+                                          ref={(element) => {
+                                            if (element) voiceAudioRefs.current[String(voiceId)] = element;
+                                            else delete voiceAudioRefs.current[String(voiceId)];
+                                          }}
+                                          preload="metadata"
+                                          playsInline
+                                          src={url}
+                                          onTimeUpdate={(event) => handleVoiceTimeUpdate(voiceId, event)}
+                                          onLoadedMetadata={(event) => handleVoiceLoadedMetadata(voiceId, event)}
+                                          onEnded={() => handleVoiceEnded(voiceId)}
+                                          className="hidden"
+                                        />
+
                                         <div className="flex items-center gap-2">
-                                          <audio controls preload="metadata" playsInline className="w-64 max-w-full" src={url}>
-                                            <source src={url} type={typeof attachment === 'object' ? (attachment.mime_type || attachment.mimeType || (attachment.file_name?.toLowerCase().endsWith('.ogg') ? 'audio/ogg' : attachment.file_name?.toLowerCase().endsWith('.mp3') ? 'audio/mpeg' : attachment.file_name?.toLowerCase().endsWith('.wav') ? 'audio/wav' : 'audio/webm')) : 'audio/webm'} />
-                                            Your browser cannot play this voice note.
-                                          </audio>
-                                        </div>
-                                        <div className="mt-1 text-[10px] opacity-70 flex items-center gap-2">
-                                          <Mic className="w-3 h-3" />
-                                          Voice note{typeof attachment === 'object' && attachment.duration ? ` • ${Math.floor(attachment.duration / 60)}:${String(attachment.duration % 60).padStart(2, '0')}` : ''}
+                                          <button
+                                            type="button"
+                                            onClick={() => toggleVoiceNote(voiceId, url)}
+                                            className={`w-9 h-9 rounded-full shrink-0 flex items-center justify-center ${isOwnMessage ? 'bg-white text-[#1f4f8f]' : 'bg-[#1f4f8f] text-white'} shadow-sm hover:scale-[1.03] transition-transform`}
+                                            aria-label={isVoicePlaying ? 'Pause voice note' : 'Play voice note'}
+                                          >
+                                            {isVoicePlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+                                          </button>
+
+                                          <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-1.5 h-5">
+                                              {Array.from({ length: 24 }).map((_, barIndex) => {
+                                                const threshold = ((barIndex + 1) / 24) * 100;
+                                                const active = threshold <= voiceProgressValue;
+                                                const heights = [6, 10, 14, 8, 12, 16, 9, 13, 7, 15, 11, 17];
+                                                return (
+                                                  <span
+                                                    key={barIndex}
+                                                    className={`w-[2px] rounded-full ${active ? (isOwnMessage ? 'bg-white' : 'bg-[#1f4f8f]') : (isOwnMessage ? 'bg-white/35' : 'bg-slate-300 dark:bg-slate-600')}`}
+                                                    style={{ height: `${heights[barIndex % heights.length]}px` }}
+                                                  />
+                                                );
+                                              })}
+                                            </div>
+                                            <div className="flex items-center justify-between mt-0.5 text-[9px] opacity-75">
+                                              <span>{isVoicePlaying ? 'Playing' : 'Voice note'}</span>
+                                              <span>{formatVoiceDuration(voiceDuration)}</span>
+                                            </div>
+                                          </div>
                                         </div>
                                       </div>
                                     );
@@ -4665,6 +4971,9 @@ export default function ChatRoom() {
                             </p>
                           )}
 
+                        </div>
+
+                          </div>
                         </div>
 
                         {/* MESSAGE REACTIONS */}
@@ -4856,7 +5165,7 @@ export default function ChatRoom() {
                 COMPOSER
             ================================================= */}
 
-            <div className="shrink-0 p-3 sm:p-4 bg-white dark:bg-dark-card border-t border-slate-200 dark:border-dark-border pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <div className="sticky bottom-0 z-20 shrink-0 px-2 py-2 pb-[max(.5rem,env(safe-area-inset-bottom))] bg-[#f0f2f5] dark:bg-[#202c33] border-t border-[#d1d7db] dark:border-[#2a3942] md:static md:z-auto md:p-4 md:pb-4">
 
               {replyingTo && !editingMessageId && (
                 <div className="mb-3 flex items-center gap-3 rounded-xl border border-brand-500/20 bg-brand-500/5 px-3 py-2">
@@ -4883,7 +5192,7 @@ export default function ChatRoom() {
                 onSubmit={
                   handleSendMessage
                 }
-                className="flex items-center gap-3"
+                className="flex items-center gap-2"
               >
 
                 <input
@@ -4911,7 +5220,7 @@ export default function ChatRoom() {
                     (!activeRoom &&
                       !activeRecipient)
                   }
-                  className="p-2.5 rounded-xl bg-slate-100 dark:bg-dark-bg border border-slate-200 dark:border-dark-border text-slate-500 hover:text-slate-900 dark:hover:text-white transition disabled:opacity-40"
+                  className="w-10 h-10 rounded-full bg-transparent border-0 text-slate-500 text-slate-500 hover:text-slate-900 dark:hover:text-white transition disabled:opacity-40"
                   title="Attach Image"
                 >
 
@@ -4944,13 +5253,24 @@ export default function ChatRoom() {
                   onChange={
                     handleInputChange
                   }
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter') return;
+
+                    if (enterToSend && !event.shiftKey) {
+                      event.preventDefault();
+                      event.currentTarget.form?.requestSubmit();
+                    } else if (!enterToSend && event.ctrlKey) {
+                      event.preventDefault();
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }}
                   disabled={
                     isUploading ||
                     (!activeRoom &&
                       !activeRecipient)
                   }
                   data-chat-composer-input
-                  className="flex-1 bg-slate-100 dark:bg-dark-bg border border-slate-200 dark:border-dark-border rounded-xl px-4 py-3 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-brand-500 transition-colors"
+                  className="flex-1 bg-white dark:bg-[#2a3942] border border-transparent rounded-full px-4 py-2.5 text-[13px] text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-brand-500 transition-colors"
                 />
 
 
@@ -4958,7 +5278,7 @@ export default function ChatRoom() {
                   type="button"
                   onClick={isRecordingVoice ? stopVoiceRecording : startVoiceRecording}
                   disabled={isUploading || isUploadingVoice || !isConnected || (!activeRoom && !activeRecipient) || Boolean(editingMessageId)}
-                  className={`w-11 h-11 rounded-xl border transition disabled:opacity-40 flex items-center justify-center ${isRecordingVoice ? 'bg-rose-500 text-white border-rose-500 animate-pulse' : 'bg-slate-100 dark:bg-dark-bg border-slate-200 dark:border-dark-border text-slate-500 hover:text-brand-500'}`}
+                  className={`w-10 h-10 rounded-full border-0 transition disabled:opacity-40 flex items-center justify-center ${isRecordingVoice ? 'bg-rose-500 text-white border-rose-500 animate-pulse' : 'bg-slate-100 dark:bg-dark-bg border-slate-200 dark:border-dark-border text-slate-500 hover:text-brand-500'}`}
                   title={isRecordingVoice ? 'Stop and send voice note' : 'Record voice note'}
                 >
                   {isRecordingVoice ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
@@ -4981,7 +5301,7 @@ export default function ChatRoom() {
                       !activeRecipient
                     )
                   }
-                  className="inline-flex items-center justify-center px-4 py-3 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow-sm transition-all gap-2"
+                  className="w-10 h-10 inline-flex items-center justify-center bg-[#1f4f8f] hover:bg-[#173f73] disabled:opacity-50 text-white rounded-full shadow-sm transition-all gap-2"
                 >
 
                   {isUploading ? (
@@ -4994,9 +5314,7 @@ export default function ChatRoom() {
 
                   )}
 
-                  <span>
-                    Send
-                  </span>
+                  <span className="sr-only">Send</span>
 
                 </button>
 
@@ -5014,18 +5332,15 @@ export default function ChatRoom() {
       {callState && (
         <DirectCallOverlay
           callState={callState}
-          setCallState={setCallState}
           onAccept={async () => {
             try {
               stopCallRingtone();
               if (callTimeoutRef.current) { clearTimeout(callTimeoutRef.current); callTimeoutRef.current = null; }
               const stream = await requestMediaStream(callState.withVideo);
               localStreamRef.current = stream;
-              setCallError('');
               setCallState((previous) => previous ? { ...previous, status: 'connecting', localStream: stream } : previous);
               socket.emit('accept_call', { targetUserId: callState.peerId, callId: callState.callId, withVideo: callState.withVideo });
             } catch (error) {
-              console.error('Incoming call media error:', error);
               setCallError(getMediaAccessError(error, { video: callState.withVideo }));
             }
           }}

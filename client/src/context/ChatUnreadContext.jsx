@@ -166,7 +166,7 @@ export function ChatUnreadProvider({ children }) {
    * MongoDB is the final authority.
    */
   const markRoomAsRead = useCallback(
-    async (roomId) => {
+    async (roomId, throughMessageId = null) => {
       if (
         !roomId ||
         !isAuthenticated ||
@@ -185,7 +185,7 @@ export function ChatUnreadProvider({ children }) {
       /*
        * Optimistically remove the room badge.
        */
-      if (previousRoomCount > 0) {
+      if (previousRoomCount > 0 && !throughMessageId) {
         const nextRooms = {
           ...roomUnreadCountsRef.current
         };
@@ -219,7 +219,10 @@ export function ChatUnreadProvider({ children }) {
           await apiClient.patch(
             `/chat/rooms/${encodeURIComponent(
               roomId
-            )}/read`
+            )}/read`,
+            throughMessageId
+              ? { throughMessageId }
+              : undefined
           );
 
         const root =
@@ -272,7 +275,12 @@ export function ChatUnreadProvider({ children }) {
             ...directUnreadCountsRef.current
           };
 
-          delete nextDirect[recipientKey];
+          if (serverRoomUnread > 0) {
+            nextDirect[recipientKey] =
+              serverRoomUnread;
+          } else {
+            delete nextDirect[recipientKey];
+          }
 
           directUnreadCountsRef.current =
             nextDirect;
@@ -318,7 +326,10 @@ export function ChatUnreadProvider({ children }) {
           socket.emit(
             'mark_messages_read',
             {
-              roomId
+              roomId,
+              ...(throughMessageId
+                ? { throughMessageId }
+                : {})
             }
           );
         }

@@ -12,6 +12,7 @@ export default function DirectCallOverlay({
 }) {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const remoteAudioRef = useRef(null);
 
   useEffect(() => {
     if (localVideoRef.current && callState?.localStream) {
@@ -20,10 +21,41 @@ export default function DirectCallOverlay({
   }, [callState?.localStream]);
 
   useEffect(() => {
-    if (remoteVideoRef.current && callState?.remoteStream) {
-      remoteVideoRef.current.srcObject = callState.remoteStream;
+    const remoteStream = callState?.remoteStream;
+    const videoElement = remoteVideoRef.current;
+    const audioElement = remoteAudioRef.current;
+
+    if (!remoteStream) return undefined;
+
+    if (videoElement) {
+      videoElement.srcObject = remoteStream;
+      videoElement.play().catch((playError) => {
+        console.warn('[Call] Remote video autoplay was blocked:', playError);
+      });
     }
-  }, [callState?.remoteStream]);
+
+    if (audioElement) {
+      audioElement.srcObject = remoteStream;
+      audioElement.muted = false;
+      audioElement.volume = 1;
+      audioElement.autoplay = true;
+
+      const playAudio = () => {
+        audioElement.play().catch((playError) => {
+          console.warn('[Call] Remote audio playback was blocked:', playError);
+        });
+      };
+
+      audioElement.addEventListener('canplay', playAudio);
+      playAudio();
+
+      return () => {
+        audioElement.removeEventListener('canplay', playAudio);
+      };
+    }
+
+    return undefined;
+  }, [callState?.remoteStream, callState?.withVideo]);
 
   if (!callState) return null;
 
@@ -31,78 +63,193 @@ export default function DirectCallOverlay({
   const video = Boolean(callState.withVideo);
 
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-white/10 bg-slate-900 shadow-2xl">
-        <div className="relative aspect-video bg-black overflow-hidden">
-          {video ? (
-            <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center text-white">
-              <div className="w-20 h-20 rounded-full bg-brand-500/20 border border-brand-400/30 flex items-center justify-center text-3xl font-bold mb-4">
-                {(callState.peerName || 'M').charAt(0).toUpperCase()}
-              </div>
-              <p className="font-semibold text-lg">{callState.peerName}</p>
-              <p className="text-sm text-slate-400 mt-1">
-                {incoming ? 'Incoming voice call' : callState.status === 'calling' ? 'Calling…' : callState.status === 'no_answer' ? 'No Answer' : callState.status === 'connected' ? 'Voice call' : 'Connecting…'}
+    <div className="fixed inset-0 z-[200] bg-slate-950 flex items-center justify-center overflow-hidden">
+      {video ? (
+        <div className="relative w-full h-full bg-black overflow-hidden">
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+
+          <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-black/60 pointer-events-none" />
+
+          {callState.localStream && (
+            <div className="absolute right-3 top-3 sm:right-5 sm:top-5 w-28 sm:w-40 md:w-52 aspect-video rounded-xl sm:rounded-2xl overflow-hidden border border-white/30 bg-black shadow-2xl z-10">
+              <video
+                ref={localVideoRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+              />
+            </div>
+          )}
+
+          <div className="absolute top-3 left-3 sm:top-5 sm:left-5 z-10 max-w-[65%]">
+            <div className="rounded-2xl bg-black/35 backdrop-blur-md border border-white/10 px-3 py-2">
+              <p className="text-white text-sm sm:text-base font-semibold truncate">
+                {callState.peerName || 'User'}
+              </p>
+              <p className="text-white/70 text-[10px] sm:text-xs mt-0.5">
+                {incoming
+                  ? 'Incoming video call'
+                  : callState.status === 'connected'
+                    ? 'Connected'
+                    : callState.status === 'calling'
+                      ? 'Calling…'
+                      : callState.status === 'no_answer'
+                        ? 'No Answer'
+                        : 'Connecting…'}
               </p>
             </div>
-          )}
+          </div>
 
-          {video && callState.localStream && (
-            <div className="absolute right-4 top-4 w-32 sm:w-40 aspect-video rounded-xl overflow-hidden border border-white/20 bg-black shadow-xl">
-              <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
-            </div>
-          )}
-
-          <button type="button" onClick={onEnd} className="absolute right-4 top-4 w-9 h-9 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition">
-            <X className="w-4 h-4" />
+          <button
+            type="button"
+            onClick={onEnd}
+            className="absolute right-3 top-3 sm:right-5 sm:top-5 w-10 h-10 rounded-full bg-black/45 hover:bg-black/65 text-white flex items-center justify-center transition z-20"
+            title="Close"
+            aria-label="Close video call"
+          >
+            <X className="w-5 h-5" />
           </button>
 
           {error && (
-            <div className="absolute left-4 right-4 bottom-4 rounded-xl bg-rose-500/90 text-white px-4 py-3 text-xs">
+            <div className="absolute left-3 right-3 sm:left-5 sm:right-5 bottom-28 sm:bottom-32 z-20 rounded-xl bg-rose-500/90 text-white px-4 py-3 text-xs shadow-xl">
               {error}
             </div>
           )}
-        </div>
-
-        <div className="px-5 py-5">
-          <div className="text-center mb-5">
-            <p className="text-white font-semibold">{callState.peerName}</p>
-            <p className="text-xs text-slate-400 mt-1">
-              {incoming ? 'wants to call you' : callState.status === 'connected' ? 'Connected' : callState.status === 'calling' ? 'Calling…' : callState.status === 'no_answer' ? 'No Answer' : 'Connecting…'}
-            </p>
-          </div>
 
           {incoming ? (
-            <div className="flex items-center justify-center gap-4">
-              <button type="button" onClick={onReject} className="w-14 h-14 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center transition" title="Decline">
-                <PhoneOff className="w-5 h-5" />
+            <div className="absolute left-0 right-0 bottom-5 sm:bottom-8 flex items-center justify-center gap-5 z-20">
+              <button
+                type="button"
+                onClick={onReject}
+                className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow-xl transition"
+                title="Decline"
+              >
+                <PhoneOff className="w-5 h-5 sm:w-6 sm:h-6" />
               </button>
-              <button type="button" onClick={onAccept} className="w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center transition" title="Accept">
-                <Phone className="w-5 h-5" />
+              <button
+                type="button"
+                onClick={onAccept}
+                className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center shadow-xl transition"
+                title="Accept"
+              >
+                <Phone className="w-5 h-5 sm:w-6 sm:h-6" />
               </button>
             </div>
           ) : callState.status === 'no_answer' ? (
-            <div className="flex items-center justify-center gap-3">
-              <button type="button" onClick={onEnd} className="px-5 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold transition">Close</button>
+            <div className="absolute left-0 right-0 bottom-5 sm:bottom-8 flex items-center justify-center z-20">
+              <button
+                type="button"
+                onClick={onEnd}
+                className="px-6 py-3 rounded-full bg-slate-800/90 hover:bg-slate-700 text-white text-xs font-semibold transition border border-white/10"
+              >
+                Close
+              </button>
             </div>
           ) : (
-            <div className="flex items-center justify-center gap-3">
+            <div className="absolute left-0 right-0 bottom-5 sm:bottom-8 flex items-center justify-center gap-3 sm:gap-4 z-20">
               {video && (
-                <button type="button" onClick={onToggleCamera} className="w-12 h-12 rounded-full bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center transition" title={callState.cameraOff ? 'Turn camera on' : 'Turn camera off'}>
+                <button
+                  type="button"
+                  onClick={onToggleCamera}
+                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-black/55 hover:bg-black/70 text-white flex items-center justify-center transition border border-white/10"
+                  title={callState.cameraOff ? 'Turn camera on' : 'Turn camera off'}
+                >
                   {callState.cameraOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
                 </button>
               )}
-              <button type="button" onClick={onToggleMute} className="w-12 h-12 rounded-full bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center transition" title={callState.muted ? 'Unmute' : 'Mute'}>
+              <button
+                type="button"
+                onClick={onToggleMute}
+                className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-black/55 hover:bg-black/70 text-white flex items-center justify-center transition border border-white/10"
+                title={callState.muted ? 'Unmute' : 'Mute'}
+              >
                 {callState.muted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
               </button>
-              <button type="button" onClick={onEnd} className="w-14 h-14 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center transition" title="End call">
-                <PhoneOff className="w-5 h-5" />
+              <button
+                type="button"
+                onClick={onEnd}
+                className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow-xl transition"
+                title="End call"
+              >
+                <PhoneOff className="w-5 h-5 sm:w-6 sm:h-6" />
               </button>
             </div>
           )}
         </div>
-      </div>
+      ) : (
+        <div className="relative w-full h-full flex items-center justify-center bg-slate-950">
+          <audio
+            ref={remoteAudioRef}
+            autoPlay
+            playsInline
+            controls={false}
+            className="hidden"
+          />
+
+          <div className="text-center text-white px-6">
+            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-brand-500/20 border border-brand-400/30 flex items-center justify-center text-4xl font-bold mx-auto mb-5">
+              {(callState.peerName || 'M').charAt(0).toUpperCase()}
+            </div>
+            <p className="font-semibold text-xl">{callState.peerName}</p>
+            <p className="text-sm text-slate-400 mt-2">
+              {incoming
+                ? 'Incoming voice call'
+                : callState.status === 'calling'
+                  ? 'Calling…'
+                  : callState.status === 'no_answer'
+                    ? 'No Answer'
+                    : callState.status === 'connected'
+                      ? 'Voice call'
+                      : 'Connecting…'}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onEnd}
+            className="absolute right-4 top-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition"
+            title="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          {error && (
+            <div className="absolute left-4 right-4 bottom-28 rounded-xl bg-rose-500/90 text-white px-4 py-3 text-xs">
+              {error}
+            </div>
+          )}
+
+          {incoming ? (
+            <div className="absolute left-0 right-0 bottom-8 flex items-center justify-center gap-5">
+              <button type="button" onClick={onReject} className="w-16 h-16 rounded-full bg-rose-600 text-white flex items-center justify-center shadow-xl" title="Decline">
+                <PhoneOff className="w-6 h-6" />
+              </button>
+              <button type="button" onClick={onAccept} className="w-16 h-16 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-xl" title="Accept">
+                <Phone className="w-6 h-6" />
+              </button>
+            </div>
+          ) : callState.status === 'no_answer' ? (
+            <div className="absolute left-0 right-0 bottom-8 flex items-center justify-center">
+              <button type="button" onClick={onEnd} className="px-6 py-3 rounded-full bg-slate-800 text-white text-xs font-semibold">Close</button>
+            </div>
+          ) : (
+            <div className="absolute left-0 right-0 bottom-8 flex items-center justify-center gap-4">
+              <button type="button" onClick={onToggleMute} className="w-14 h-14 rounded-full bg-slate-800 text-white flex items-center justify-center" title={callState.muted ? 'Unmute' : 'Mute'}>
+                {callState.muted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+              </button>
+              <button type="button" onClick={onEnd} className="w-16 h-16 rounded-full bg-rose-600 text-white flex items-center justify-center shadow-xl" title="End call">
+                <PhoneOff className="w-6 h-6" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
