@@ -24,6 +24,12 @@ import {
 // - Tailwind dark: classes automatically follow the global
 //   `dark` class applied by the application's theme system.
 //
+// Visual behavior:
+// - Transparent glassmorphism design
+// - Allows BackgroundSlider imagery to remain visible
+// - Works consistently on Home, Login and Signup pages
+// - Preserves existing navigation and functionality
+//
 // ============================================================
 
 const Footer = () => {
@@ -31,22 +37,44 @@ const Footer = () => {
     <footer
       className="
         mt-auto
+        relative
+        overflow-hidden
         border-t
-        border-slate-200
-        bg-white
+        border-white/15
+        bg-white/[0.06]
+        backdrop-blur-2xl
+        shadow-[0_-12px_40px_rgba(0,0,0,0.12)]
         transition-colors
         duration-200
-        dark:border-dark-border
-        dark:bg-dark-card
+        dark:border-white/10
+        dark:bg-slate-950/[0.18]
       "
     >
+
+      {/* ====================================================
+          SUBTLE GLASS HIGHLIGHT
+      ===================================================== */}
+
+      <div
+        className="
+          pointer-events-none
+          absolute
+          inset-x-0
+          top-0
+          h-px
+          bg-white/30
+          dark:bg-white/15
+        "
+      />
+
       <div
         className="
           mx-auto
           max-w-7xl
           px-4
-          py-12
+          py-8
           sm:px-6
+          sm:py-10
           lg:px-8
         "
       >
@@ -57,10 +85,10 @@ const Footer = () => {
 
         <div
           className="
-            mb-10
+            mb-8
             grid
             grid-cols-1
-            gap-10
+            gap-8
             md:grid-cols-4
           "
         >
@@ -71,7 +99,7 @@ const Footer = () => {
 
           <div
             className="
-              space-y-5
+              space-y-4
               md:col-span-2
             "
           >
@@ -100,15 +128,17 @@ const Footer = () => {
                   items-center
                   justify-center
                   rounded-xl
-                  bg-white
+                  bg-white/80
                   border
-                  border-slate-200
-                  dark:border-slate-200
+                  border-white/50
                   overflow-hidden
-                  shadow-sm
+                  shadow-lg
+                  backdrop-blur-md
                   transition-transform
                   duration-200
                   group-hover:scale-105
+                  dark:bg-white/10
+                  dark:border-white/20
                 "
               >
                 <img
@@ -135,24 +165,23 @@ const Footer = () => {
                     text-lg
                     font-black
                     tracking-tight
-                    text-slate-900
-                    dark:text-white
+                    text-white
+                    drop-shadow-sm
                   "
                 >
                   EAZY DON
-                  <span className="text-brand-500">
+                  <span className="text-brand-400">
                     CHECK
                   </span>
                 </div>
 
                 <div
                   className="
-                    text-[11px]
-                    font-medium
+                    text-[10px]
+                    font-semibold
                     uppercase
                     tracking-wider
-                    text-slate-500
-                    dark:text-slate-500
+                    text-white/65
                   "
                 >
                   Smart Verification & Social Community
@@ -169,9 +198,8 @@ const Footer = () => {
               className="
                 max-w-md
                 text-sm
-                leading-7
-                text-slate-600
-                dark:text-slate-400
+                leading-6
+                text-white/70
               "
             >
               EAZY DON CHECK is a smart digital platform combining
@@ -191,14 +219,14 @@ const Footer = () => {
                 gap-2
                 rounded-full
                 border
-                border-emerald-500/20
-                bg-emerald-500/10
+                border-emerald-300/25
+                bg-emerald-400/10
                 px-3
                 py-1.5
                 text-xs
                 font-medium
-                text-emerald-600
-                dark:text-emerald-400
+                text-emerald-300
+                backdrop-blur-md
               "
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
@@ -219,13 +247,12 @@ const Footer = () => {
 
             <h4
               className="
-                mb-5
+                mb-4
                 text-xs
                 font-bold
                 uppercase
                 tracking-wider
-                text-slate-900
-                dark:text-slate-200
+                text-white
               "
             >
               Platform
@@ -234,10 +261,9 @@ const Footer = () => {
 
             <ul
               className="
-                space-y-3
+                space-y-2.5
                 text-sm
-                text-slate-600
-                dark:text-slate-400
+                text-white/65
               "
             >
 
@@ -246,7 +272,7 @@ const Footer = () => {
                   to="/"
                   className="
                     transition-colors
-                    hover:text-brand-500
+                    hover:text-brand-300
                   "
                 >
                   Home
@@ -259,7 +285,7 @@ const Footer = () => {
                   to="/feed"
                   className="
                     transition-colors
-                    hover:text-brand-500
+                    hover:text-brand-300
                   "
                 >
                   Community Feed
@@ -272,7 +298,7 @@ const Footer = () => {
                   to="/dashboard"
                   className="
                     transition-colors
-                    hover:text-brand-500
+                    hover:text-brand-300
                   "
                 >
                   Receipt Dashboard
@@ -285,7 +311,7 @@ const Footer = () => {
                   to="/verify"
                   className="
                     transition-colors
-                    hover:text-brand-500
+                    hover:text-brand-300
                   "
                 >
                   Verify Receipt
@@ -301,10 +327,9 @@ const Footer = () => {
                     items-center
                     gap-1
                     font-medium
-                    text-brand-500
+                    text-brand-300
                     transition-colors
-                    hover:text-brand-600
-                    dark:hover:text-brand-400
+                    hover:text-brand-200
                   "
                 >
                   Get Started
@@ -326,13 +351,12 @@ const Footer = () => {
 
             <h4
               className="
-                mb-5
+                mb-4
                 text-xs
                 font-bold
                 uppercase
                 tracking-wider
-                text-slate-900
-                dark:text-slate-200
+                text-white
               "
             >
               Security & Privacy
@@ -341,10 +365,9 @@ const Footer = () => {
 
             <ul
               className="
-                space-y-3
+                space-y-2.5
                 text-sm
-                text-slate-600
-                dark:text-slate-400
+                text-white/65
               "
             >
 
@@ -358,7 +381,7 @@ const Footer = () => {
                     items-center
                     gap-2
                     transition-colors
-                    hover:text-brand-500
+                    hover:text-brand-300
                   "
                 >
                   <Shield className="h-4 w-4" />
@@ -380,7 +403,7 @@ const Footer = () => {
                     items-center
                     gap-2
                     transition-colors
-                    hover:text-brand-500
+                    hover:text-brand-300
                   "
                 >
                   <FileText className="h-4 w-4" />
@@ -402,7 +425,7 @@ const Footer = () => {
                     items-center
                     gap-2
                     transition-colors
-                    hover:text-brand-500
+                    hover:text-brand-300
                   "
                 >
                   <LockKeyhole className="h-4 w-4" />
@@ -426,22 +449,24 @@ const Footer = () => {
 
         <div
           className="
-            mb-8
+            mb-7
             flex
             flex-col
             gap-4
             rounded-2xl
             border
-            border-slate-200
-            bg-slate-50
-            p-5
+            border-white/15
+            bg-white/[0.06]
+            p-4
+            backdrop-blur-xl
+            shadow-lg
             transition-colors
             duration-200
-            dark:border-white/10
-            dark:bg-white/[0.03]
             sm:flex-row
             sm:items-center
             sm:justify-between
+            dark:border-white/10
+            dark:bg-white/[0.035]
           "
         >
 
@@ -463,9 +488,11 @@ const Footer = () => {
                 items-center
                 justify-center
                 rounded-lg
+                border
+                border-brand-300/15
                 bg-brand-500/10
-                text-brand-600
-                dark:text-brand-400
+                text-brand-300
+                backdrop-blur-md
               "
             >
               <LockKeyhole className="h-5 w-5" />
@@ -478,8 +505,7 @@ const Footer = () => {
                 className="
                   text-sm
                   font-semibold
-                  text-slate-900
-                  dark:text-white
+                  text-white
                 "
               >
                 Your security matters
@@ -491,8 +517,7 @@ const Footer = () => {
                   max-w-2xl
                   text-xs
                   leading-5
-                  text-slate-500
-                  dark:text-slate-500
+                  text-white/55
                 "
               >
                 EAZY DON CHECK is designed with authentication,
@@ -515,18 +540,18 @@ const Footer = () => {
               gap-2
               rounded-lg
               border
-              border-slate-300
+              border-white/20
+              bg-white/[0.05]
               px-4
               py-2
               text-xs
               font-semibold
-              text-slate-700
+              text-white/80
+              backdrop-blur-md
               transition
-              hover:border-brand-500/40
-              hover:text-brand-500
-              dark:border-white/10
-              dark:text-slate-300
-              dark:hover:text-brand-400
+              hover:border-brand-300/40
+              hover:bg-white/10
+              hover:text-brand-300
             "
           >
             Learn More
@@ -547,16 +572,16 @@ const Footer = () => {
             flex-col
             items-center
             justify-between
-            gap-4
+            gap-3
             border-t
-            border-slate-200
-            pt-7
+            border-white/15
+            pt-5
             text-xs
-            text-slate-500
+            text-white/45
             transition-colors
             duration-200
-            dark:border-white/10
             sm:flex-row
+            dark:border-white/10
           "
         >
 
@@ -578,8 +603,7 @@ const Footer = () => {
               to="/privacy-policy"
               className="
                 transition-colors
-                hover:text-slate-700
-                dark:hover:text-slate-300
+                hover:text-white/80
               "
             >
               Privacy
@@ -590,8 +614,7 @@ const Footer = () => {
               to="/terms-of-service"
               className="
                 transition-colors
-                hover:text-slate-700
-                dark:hover:text-slate-300
+                hover:text-white/80
               "
             >
               Terms
@@ -602,8 +625,7 @@ const Footer = () => {
               to="/security"
               className="
                 transition-colors
-                hover:text-slate-700
-                dark:hover:text-slate-300
+                hover:text-white/80
               "
             >
               Security
@@ -614,6 +636,7 @@ const Footer = () => {
         </div>
 
       </div>
+
     </footer>
   );
 };

@@ -16,8 +16,9 @@ import {
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 
+import BackgroundSlider from '../components/layout/BackgroundSlider';
+
 import {
-  ShieldCheck,
   Mail,
   Lock,
   Eye,
@@ -30,13 +31,11 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 
-
 // ============================================================
 // BRAND LOGO
 // ============================================================
 
 const LOGO_SRC = '/eazy-don-check-logo.png';
-
 
 // ============================================================
 // COMPONENT
@@ -53,52 +52,43 @@ const Login = () => {
     rememberMe: false,
   });
 
-
   const [
     showPassword,
     setShowPassword,
   ] = useState(false);
-
 
   const [
     error,
     setError,
   ] = useState('');
 
-
   const [
     loading,
     setLoading,
   ] = useState(false);
-
 
   const [
     biometricLoading,
     setBiometricLoading,
   ] = useState(false);
 
-
   const [
     twoFactorMode,
     setTwoFactorMode,
   ] = useState(false);
-
 
   const [
     twoFactorCode,
     setTwoFactorCode,
   ] = useState('');
 
-
   const [
     useRecoveryCode,
     setUseRecoveryCode,
   ] = useState(false);
 
-
   const twoFactorInputRef =
     useRef(null);
-
 
   const {
     login,
@@ -107,10 +97,8 @@ const Login = () => {
     biometricLogin,
   } = useAuth();
 
-
   const navigate =
     useNavigate();
-
 
   // ============================================================
   // BIOMETRIC AVAILABILITY
@@ -124,7 +112,6 @@ const Login = () => {
     );
   };
 
-
   // ============================================================
   // FOCUS 2FA INPUT
   // ============================================================
@@ -135,13 +122,13 @@ const Login = () => {
         twoFactorInputRef.current?.focus();
       }, 50);
 
-      return () => window.clearTimeout(timer);
+      return () =>
+        window.clearTimeout(timer);
     }
   }, [
     twoFactorMode,
     useRecoveryCode,
   ]);
-
 
   // ============================================================
   // HANDLE INPUT CHANGES
@@ -167,7 +154,6 @@ const Login = () => {
       setError('');
     }
   };
-
 
   // ============================================================
   // NORMAL LOGIN
@@ -242,7 +228,6 @@ const Login = () => {
       setLoading(false);
     }
   };
-
 
   // ============================================================
   // TWO-FACTOR LOGIN
@@ -322,7 +307,6 @@ const Login = () => {
       }
     };
 
-
   // ============================================================
   // CANCEL TWO-FACTOR
   // ============================================================
@@ -336,7 +320,6 @@ const Login = () => {
     setUseRecoveryCode(false);
     setError('');
   };
-
 
   // ============================================================
   // BIOMETRIC LOGIN
@@ -408,750 +391,370 @@ const Login = () => {
       }
     };
 
-
   // ============================================================
   // RENDER
   // ============================================================
 
   return (
-    <div
-      className="
-        min-h-screen
-        flex
-        flex-col
-        bg-gray-50
-        dark:bg-dark-bg
-        text-gray-900
-        dark:text-gray-100
-        transition-colors
-        duration-300
-      "
+    <BackgroundSlider
+      page="login"
+      interval={6000}
+      overlay="dark"
     >
 
-      <Navbar />
-
-
-      <main
+      <div
         className="
-          flex-1
+          min-h-screen
           flex
-          items-center
-          justify-center
-          px-4
-          py-10
-          sm:px-6
-          lg:px-8
+          flex-col
+          text-slate-100
+          transition-colors
+          duration-300
         "
       >
 
-        <div
+        <Navbar />
+
+        <main
           className="
-            w-full
-            max-w-md
+            flex-1
+            flex
+            items-center
+            justify-center
+            px-4
+            py-6
+            sm:px-6
+            sm:py-8
+            lg:px-8
+            relative
+            overflow-hidden
           "
         >
 
           {/* ==================================================
-              LOGIN CARD
+              BACKGROUND GLOW
           ================================================== */}
 
           <div
             className="
-              bg-white
-              dark:bg-dark-card
-              border
-              border-gray-200
-              dark:border-dark-border
-              rounded-2xl
-              shadow-xl
-              overflow-hidden
+              absolute
+              top-1/4
+              left-1/2
+              -translate-x-1/2
+              w-[360px]
+              h-[360px]
+              sm:w-[420px]
+              sm:h-[420px]
+              bg-brand-500/10
+              rounded-full
+              blur-[120px]
+              pointer-events-none
+            "
+          />
+
+          <div
+            className="
+              w-full
+              max-w-[360px]
+              relative
+              z-10
             "
           >
 
             {/* ==================================================
-                HEADER
+                LOGIN CARD
             ================================================== */}
 
             <div
               className="
-                px-6
-                pt-8
-                pb-6
-                text-center
+                w-full
+                rounded-3xl
+                border
+                border-white/25
+                bg-white/10
+                dark:bg-slate-950/25
+                backdrop-blur-2xl
+                shadow-[0_20px_70px_rgba(0,0,0,0.28)]
+                ring-1
+                ring-white/10
+                overflow-hidden
               "
             >
 
-              {/* LOGO */}
+              {/* ==================================================
+                  HEADER
+              ================================================== */}
 
               <div
                 className="
-                  mx-auto
-                  mb-4
-                  flex
-                  h-16
-                  w-16
-                  items-center
-                  justify-center
-                  rounded-2xl
-                  bg-white
-                  border
-                  border-slate-200
-                  dark:border-slate-200
-                  overflow-hidden
-                  shadow-sm
+                  px-5
+                  pt-5
+                  pb-3
+                  sm:px-6
+                  sm:pt-6
                 "
               >
 
-                <img
-                  src={LOGO_SRC}
-                  alt="EAZY DON CHECK"
+                {/* LOGO */}
+
+                <div
                   className="
-                    w-full
-                    h-full
-                    object-contain
-                    p-2
-                    block
+                    mx-auto
+                    mb-2.5
+                    flex
+                    h-11
+                    w-11
+                    items-center
+                    justify-center
+                    rounded-xl
+                    bg-white/90
+                    border
+                    border-white/40
+                    overflow-hidden
+                    shadow-lg
+                    shadow-black/10
                   "
-                  draggable="false"
-                />
+                >
+
+                  <img
+                    src={LOGO_SRC}
+                    alt="EAZY DON CHECK"
+                    className="
+                      w-8
+                      h-8
+                      object-contain
+                      block
+                    "
+                    draggable="false"
+                  />
+
+                </div>
+
+                <h1
+                  className="
+                    text-lg
+                    sm:text-xl
+                    font-bold
+                    text-white
+                    text-center
+                  "
+                >
+                  Welcome Back
+                </h1>
+
+                <p
+                  className="
+                    mt-1
+                    text-[11px]
+                    sm:text-xs
+                    text-white/60
+                    text-center
+                  "
+                >
+                  Sign in to your EAZY DON CHECK account
+                </p>
 
               </div>
 
-
-              <h1
+              <div
                 className="
-                  text-2xl
-                  font-bold
-                  text-gray-900
-                  dark:text-white
+                  px-5
+                  pb-5
+                  sm:px-6
+                  sm:pb-6
                 "
               >
-                Welcome Back
-              </h1>
 
+                {/* =================================================
+                    ERROR
+                ================================================= */}
 
-              <p
-                className="
-                  mt-2
-                  text-sm
-                  text-gray-500
-                  dark:text-gray-400
-                "
-              >
-                Sign in to your EAZY DON CHECK account
-              </p>
-
-            </div>
-
-
-            <div
-              className="
-                px-6
-                pb-7
-              "
-            >
-
-              {/* ERROR */}
-
-              {error && (
-                <div
-                  className="
-                    mb-5
-                    flex
-                    items-start
-                    gap-3
-                    rounded-lg
-                    border
-                    border-red-200
-                    dark:border-red-900/50
-                    bg-red-50
-                    dark:bg-red-950/30
-                    px-4
-                    py-3
-                    text-sm
-                    text-red-700
-                    dark:text-red-300
-                  "
-                >
-
-                  <AlertCircle
-                    className="
-                      mt-0.5
-                      h-5
-                      w-5
-                      flex-shrink-0
-                    "
-                  />
-
-                  <p className="leading-5">
-                    {error}
-                  </p>
-
-                </div>
-              )}
-
-
-              {/* =================================================
-                  TWO-FACTOR AUTHENTICATION
-              ================================================= */}
-
-              {twoFactorMode ? (
-
-                <form
-                  onSubmit={
-                    handleTwoFactorSubmit
-                  }
-                  className="space-y-5"
-                >
-
+                {error && (
                   <div
                     className="
-                      text-center
-                      mb-6
+                      mb-3.5
+                      flex
+                      items-start
+                      gap-2
+                      rounded-xl
+                      border
+                      border-red-400/30
+                      bg-red-500/10
+                      backdrop-blur-md
+                      px-3
+                      py-2.5
+                      text-xs
+                      text-red-200
                     "
                   >
 
-                    <div
+                    <AlertCircle
                       className="
-                        mx-auto
-                        mb-3
-                        flex
-                        h-12
-                        w-12
-                        items-center
-                        justify-center
-                        rounded-full
-                        bg-brand-600/10
-                        dark:bg-brand-500/10
+                        mt-0.5
+                        h-4
+                        w-4
+                        flex-shrink-0
                       "
-                    >
-                      <KeyRound
-                        className="
-                          w-6
-                          h-6
-                          text-brand-600
-                          dark:text-brand-400
-                        "
-                      />
-                    </div>
+                    />
 
-
-                    <h2
-                      className="
-                        text-lg
-                        font-semibold
-                        text-gray-900
-                        dark:text-white
-                      "
-                    >
-                      Two-Factor Authentication
-                    </h2>
-
-
-                    <p
-                      className="
-                        mt-1
-                        text-sm
-                        text-gray-500
-                        dark:text-gray-400
-                      "
-                    >
-                      {useRecoveryCode
-                        ? 'Enter one of your recovery codes.'
-                        : 'Enter the authentication code from your authenticator app.'}
+                    <p className="leading-5">
+                      {error}
                     </p>
 
                   </div>
+                )}
 
+                {/* =================================================
+                    TWO-FACTOR AUTHENTICATION
+                ================================================= */}
 
-                  {/* 2FA INPUT */}
+                {twoFactorMode ? (
 
-                  <div>
-
-                    <label
-                      htmlFor="twoFactorCode"
-                      className="
-                        block
-                        mb-2
-                        text-sm
-                        font-medium
-                        text-gray-700
-                        dark:text-gray-300
-                      "
-                    >
-                      {useRecoveryCode
-                        ? 'Recovery Code'
-                        : 'Authentication Code'}
-                    </label>
-
-
-                    <input
-                      ref={twoFactorInputRef}
-                      id="twoFactorCode"
-                      name="twoFactorCode"
-                      type="text"
-                      inputMode={
-                        useRecoveryCode
-                          ? 'text'
-                          : 'numeric'
-                      }
-                      autoComplete="one-time-code"
-                      value={twoFactorCode}
-                      onChange={(e) => {
-                        setTwoFactorCode(
-                          e.target.value
-                        );
-
-                        if (error) {
-                          setError('');
-                        }
-                      }}
-                      placeholder={
-                        useRecoveryCode
-                          ? 'Enter recovery code'
-                          : '000000'
-                      }
-                      maxLength={
-                        useRecoveryCode
-                          ? 64
-                          : 6
-                      }
-                      className="
-                        w-full
-                        rounded-lg
-                        border
-                        border-gray-300
-                        dark:border-dark-border
-                        bg-white
-                        dark:bg-dark-bg
-                        px-4
-                        py-3
-                        text-sm
-                        text-gray-900
-                        dark:text-white
-                        placeholder-gray-400
-                        dark:placeholder-gray-500
-                        outline-none
-                        transition
-                        focus:border-brand-500
-                        focus:ring-2
-                        focus:ring-brand-500/20
-                      "
-                    />
-
-                  </div>
-
-
-                  {/* SUBMIT */}
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="
-                      w-full
-                      py-3
-                      px-4
-                      bg-brand-600
-                      hover:bg-brand-500
-                      text-white
-                      font-semibold
-                      rounded-lg
-                      shadow-lg
-                      shadow-brand-600/20
-                      transition-all
-                      flex
-                      items-center
-                      justify-center
-                      gap-2
-                      disabled:opacity-50
-                      disabled:cursor-not-allowed
-                    "
-                  >
-
-                    {loading ? (
-                      <>
-                        <Loader2
-                          className="
-                            w-5
-                            h-5
-                            animate-spin
-                          "
-                        />
-
-                        <span>
-                          Verifying...
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span>
-                          Verify & Continue
-                        </span>
-
-                        <ArrowRight
-                          className="w-4 h-4"
-                        />
-                      </>
-                    )}
-
-                  </button>
-
-
-                  {/* RECOVERY SWITCH */}
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUseRecoveryCode(
-                        (prev) => !prev
-                      );
-
-                      setTwoFactorCode('');
-                      setError('');
-                    }}
-                    className="
-                      w-full
-                      text-sm
-                      text-brand-600
-                      dark:text-brand-400
-                      hover:text-brand-500
-                      font-medium
-                      transition-colors
-                    "
-                  >
-                    {useRecoveryCode
-                      ? 'Use authenticator code instead'
-                      : 'Use a recovery code instead'}
-                  </button>
-
-
-                  {/* BACK */}
-
-                  <button
-                    type="button"
-                    onClick={
-                      handleCancelTwoFactor
+                  <form
+                    onSubmit={
+                      handleTwoFactorSubmit
                     }
-                    className="
-                      w-full
-                      flex
-                      items-center
-                      justify-center
-                      gap-2
-                      text-sm
-                      text-gray-500
-                      dark:text-gray-400
-                      hover:text-gray-700
-                      dark:hover:text-gray-200
-                      transition-colors
-                    "
+                    className="space-y-3.5"
                   >
-
-                    <ArrowLeft
-                      className="w-4 h-4"
-                    />
-
-                    Back to sign in
-
-                  </button>
-
-                </form>
-
-              ) : (
-
-                /* =================================================
-                   NORMAL LOGIN
-                ================================================= */
-
-                <form
-                  onSubmit={handleSubmit}
-                  className="space-y-5"
-                >
-
-                  {/* EMAIL / USERNAME */}
-
-                  <div>
-
-                    <label
-                      htmlFor="email"
-                      className="
-                        block
-                        mb-2
-                        text-sm
-                        font-medium
-                        text-gray-700
-                        dark:text-gray-300
-                      "
-                    >
-                      Email or Username
-                    </label>
-
-
-                    <div className="relative">
-
-                      <Mail
-                        className="
-                          absolute
-                          left-3
-                          top-1/2
-                          -translate-y-1/2
-                          w-5
-                          h-5
-                          text-gray-400
-                          dark:text-gray-500
-                          pointer-events-none
-                        "
-                      />
-
-
-                      <input
-                        id="email"
-                        name="email"
-                        type="text"
-                        autoComplete="username"
-                        value={formData.email}
-                        onChange={handleChange}
-                        placeholder="Enter your email or username"
-                        className="
-                          w-full
-                          rounded-lg
-                          border
-                          border-gray-300
-                          dark:border-dark-border
-                          bg-white
-                          dark:bg-dark-bg
-                          pl-11
-                          pr-4
-                          py-3
-                          text-sm
-                          text-gray-900
-                          dark:text-white
-                          placeholder-gray-400
-                          dark:placeholder-gray-500
-                          outline-none
-                          transition
-                          focus:border-brand-500
-                          focus:ring-2
-                          focus:ring-brand-500/20
-                        "
-                      />
-
-                    </div>
-
-                  </div>
-
-
-                  {/* PASSWORD */}
-
-                  <div>
 
                     <div
                       className="
-                        flex
-                        items-center
-                        justify-between
-                        mb-2
+                        text-center
+                        mb-3
                       "
                     >
+
+                      <div
+                        className="
+                          mx-auto
+                          mb-2
+                          flex
+                          h-9
+                          w-9
+                          items-center
+                          justify-center
+                          rounded-full
+                          bg-brand-500/10
+                          border
+                          border-brand-400/20
+                          backdrop-blur-md
+                        "
+                      >
+
+                        <KeyRound
+                          className="
+                            w-4.5
+                            h-4.5
+                            text-brand-300
+                          "
+                        />
+
+                      </div>
+
+                      <h2
+                        className="
+                          text-sm
+                          font-semibold
+                          text-white
+                        "
+                      >
+                        Two-Factor Authentication
+                      </h2>
+
+                      <p
+                        className="
+                          mt-1
+                          text-[11px]
+                          leading-4
+                          text-white/55
+                        "
+                      >
+                        {useRecoveryCode
+                          ? 'Enter one of your recovery codes.'
+                          : 'Enter the authentication code from your authenticator app.'}
+                      </p>
+
+                    </div>
+
+                    {/* 2FA INPUT */}
+
+                    <div>
 
                       <label
-                        htmlFor="password"
+                        htmlFor="twoFactorCode"
                         className="
-                          text-sm
-                          font-medium
-                          text-gray-700
-                          dark:text-gray-300
-                        "
-                      >
-                        Password
-                      </label>
-
-
-                      <Link
-                        to="/forgot-password"
-                        className="
+                          block
+                          mb-1.5
                           text-xs
                           font-medium
-                          text-brand-600
-                          dark:text-brand-400
-                          hover:text-brand-500
-                          transition-colors
+                          text-white/75
                         "
                       >
-                        Forgot password?
-                      </Link>
-
-                    </div>
-
-
-                    <div className="relative">
-
-                      <Lock
-                        className="
-                          absolute
-                          left-3
-                          top-1/2
-                          -translate-y-1/2
-                          w-5
-                          h-5
-                          text-gray-400
-                          dark:text-gray-500
-                          pointer-events-none
-                        "
-                      />
-
+                        {useRecoveryCode
+                          ? 'Recovery Code'
+                          : 'Authentication Code'}
+                      </label>
 
                       <input
-                        id="password"
-                        name="password"
-                        type={
-                          showPassword
+                        ref={twoFactorInputRef}
+                        id="twoFactorCode"
+                        name="twoFactorCode"
+                        type="text"
+                        inputMode={
+                          useRecoveryCode
                             ? 'text'
-                            : 'password'
+                            : 'numeric'
                         }
-                        autoComplete="current-password"
-                        value={formData.password}
-                        onChange={handleChange}
-                        placeholder="Enter your password"
+                        autoComplete="one-time-code"
+                        value={twoFactorCode}
+                        onChange={(e) => {
+                          setTwoFactorCode(
+                            e.target.value
+                          );
+
+                          if (error) {
+                            setError('');
+                          }
+                        }}
+                        placeholder={
+                          useRecoveryCode
+                            ? 'Enter recovery code'
+                            : '000000'
+                        }
+                        maxLength={
+                          useRecoveryCode
+                            ? 64
+                            : 6
+                        }
                         className="
                           w-full
-                          rounded-lg
+                          rounded-xl
                           border
-                          border-gray-300
-                          dark:border-dark-border
-                          bg-white
-                          dark:bg-dark-bg
-                          pl-11
-                          pr-11
-                          py-3
+                          border-white/20
+                          bg-white/10
+                          backdrop-blur-md
+                          px-3.5
+                          py-2.5
                           text-sm
-                          text-gray-900
-                          dark:text-white
-                          placeholder-gray-400
-                          dark:placeholder-gray-500
+                          text-white
+                          placeholder-white/35
                           outline-none
                           transition
-                          focus:border-brand-500
-                          focus:ring-2
-                          focus:ring-brand-500/20
+                          focus:border-brand-400
+                          focus:ring-1
+                          focus:ring-brand-400/40
                         "
                       />
-
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setShowPassword(
-                            (prev) => !prev
-                          )
-                        }
-                        className="
-                          absolute
-                          right-3
-                          top-1/2
-                          -translate-y-1/2
-                          text-gray-400
-                          dark:text-gray-500
-                          hover:text-gray-700
-                          dark:hover:text-gray-200
-                          transition-colors
-                        "
-                        aria-label={
-                          showPassword
-                            ? 'Hide password'
-                            : 'Show password'
-                        }
-                      >
-                        {showPassword ? (
-                          <EyeOff
-                            className="w-5 h-5"
-                          />
-                        ) : (
-                          <Eye
-                            className="w-5 h-5"
-                          />
-                        )}
-                      </button>
 
                     </div>
 
-                  </div>
-
-
-                  {/* REMEMBER ME */}
-
-                  <div
-                    className="
-                      flex
-                      items-center
-                    "
-                  >
-
-                    <label
-                      className="
-                        flex
-                        items-center
-                        gap-2
-                        cursor-pointer
-                        select-none
-                      "
-                    >
-
-                      <input
-                        type="checkbox"
-                        name="rememberMe"
-                        checked={
-                          formData.rememberMe
-                        }
-                        onChange={handleChange}
-                        className="
-                          h-4
-                          w-4
-                          rounded
-                          border-gray-300
-                          dark:border-dark-border
-                          text-brand-600
-                          focus:ring-brand-500
-                          bg-white
-                          dark:bg-dark-bg
-                        "
-                      />
-
-                      <span
-                        className="
-                          text-sm
-                          text-gray-600
-                          dark:text-gray-400
-                        "
-                      >
-                        Remember me
-                      </span>
-
-                    </label>
-
-                  </div>
-
-
-                  {/* SIGN IN + BIOMETRIC */}
-
-                  <div
-                    className="
-                      flex
-                      gap-2
-                      pt-1
-                    "
-                  >
-
-                    {/* SIGN IN */}
+                    {/* SUBMIT */}
 
                     <button
                       type="submit"
-                      disabled={
-                        loading ||
-                        biometricLoading
-                      }
+                      disabled={loading}
                       className="
-                        flex-1
+                        w-full
                         py-2.5
                         px-4
                         bg-brand-600
@@ -1159,11 +762,9 @@ const Login = () => {
                         text-white
                         font-semibold
                         text-sm
-                        rounded-lg
+                        rounded-xl
                         shadow-lg
-                        shadow-brand-600/30
-                        hover:scale-[1.01]
-                        active:scale-[0.99]
+                        shadow-brand-600/20
                         transition-all
                         flex
                         items-center
@@ -1171,7 +772,6 @@ const Login = () => {
                         gap-2
                         disabled:opacity-50
                         disabled:cursor-not-allowed
-                        disabled:hover:scale-100
                       "
                     >
 
@@ -1186,13 +786,13 @@ const Login = () => {
                           />
 
                           <span>
-                            Authenticating...
+                            Verifying...
                           </span>
                         </>
                       ) : (
                         <>
                           <span>
-                            Sign In
+                            Verify & Continue
                           </span>
 
                           <ArrowRight
@@ -1203,133 +803,504 @@ const Login = () => {
 
                     </button>
 
+                    {/* RECOVERY SWITCH */}
 
-                    {/* BIOMETRIC */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUseRecoveryCode(
+                          (prev) => !prev
+                        );
 
-                    {isBiometricAvailable() && (
+                        setTwoFactorCode('');
+                        setError('');
+                      }}
+                      className="
+                        w-full
+                        text-xs
+                        text-brand-300
+                        hover:text-brand-200
+                        font-medium
+                        transition-colors
+                      "
+                    >
+                      {useRecoveryCode
+                        ? 'Use authenticator code instead'
+                        : 'Use a recovery code instead'}
+                    </button>
+
+                    {/* BACK */}
+
+                    <button
+                      type="button"
+                      onClick={
+                        handleCancelTwoFactor
+                      }
+                      className="
+                        w-full
+                        flex
+                        items-center
+                        justify-center
+                        gap-2
+                        text-xs
+                        text-white/50
+                        hover:text-white/80
+                        transition-colors
+                      "
+                    >
+
+                      <ArrowLeft
+                        className="w-3.5 h-3.5"
+                      />
+
+                      Back to sign in
+
+                    </button>
+
+                  </form>
+
+                ) : (
+
+                  /* =================================================
+                     NORMAL LOGIN
+                  ================================================= */
+
+                  <form
+                    onSubmit={handleSubmit}
+                    className="space-y-3.5"
+                  >
+
+                    {/* EMAIL / USERNAME */}
+
+                    <div>
+
+                      <label
+                        htmlFor="email"
+                        className="
+                          block
+                          mb-1.5
+                          text-xs
+                          font-medium
+                          text-white/75
+                        "
+                      >
+                        Email or Username
+                      </label>
+
+                      <div className="relative">
+
+                        <Mail
+                          className="
+                            absolute
+                            left-3
+                            top-1/2
+                            -translate-y-1/2
+                            w-4
+                            h-4
+                            text-white/40
+                            pointer-events-none
+                          "
+                        />
+
+                        <input
+                          id="email"
+                          name="email"
+                          type="text"
+                          autoComplete="username"
+                          value={formData.email}
+                          onChange={handleChange}
+                          placeholder="Enter your email or username"
+                          className="
+                            w-full
+                            rounded-xl
+                            border
+                            border-white/20
+                            bg-white/10
+                            backdrop-blur-md
+                            pl-10
+                            pr-3
+                            py-2.5
+                            text-sm
+                            text-white
+                            placeholder-white/35
+                            outline-none
+                            transition
+                            focus:border-brand-400
+                            focus:ring-1
+                            focus:ring-brand-400/40
+                          "
+                        />
+
+                      </div>
+
+                    </div>
+
+                    {/* PASSWORD */}
+
+                    <div>
+
+                      <div
+                        className="
+                          flex
+                          items-center
+                          justify-between
+                          mb-1.5
+                        "
+                      >
+
+                        <label
+                          htmlFor="password"
+                          className="
+                            text-xs
+                            font-medium
+                            text-white/75
+                          "
+                        >
+                          Password
+                        </label>
+
+                        <Link
+                          to="/forgot-password"
+                          className="
+                            text-[11px]
+                            font-medium
+                            text-brand-300
+                            hover:text-brand-200
+                            transition-colors
+                          "
+                        >
+                          Forgot password?
+                        </Link>
+
+                      </div>
+
+                      <div className="relative">
+
+                        <Lock
+                          className="
+                            absolute
+                            left-3
+                            top-1/2
+                            -translate-y-1/2
+                            w-4
+                            h-4
+                            text-white/40
+                            pointer-events-none
+                          "
+                        />
+
+                        <input
+                          id="password"
+                          name="password"
+                          type={
+                            showPassword
+                              ? 'text'
+                              : 'password'
+                          }
+                          autoComplete="current-password"
+                          value={formData.password}
+                          onChange={handleChange}
+                          placeholder="Enter your password"
+                          className="
+                            w-full
+                            rounded-xl
+                            border
+                            border-white/20
+                            bg-white/10
+                            backdrop-blur-md
+                            pl-10
+                            pr-10
+                            py-2.5
+                            text-sm
+                            text-white
+                            placeholder-white/35
+                            outline-none
+                            transition
+                            focus:border-brand-400
+                            focus:ring-1
+                            focus:ring-brand-400/40
+                          "
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowPassword(
+                              (prev) => !prev
+                            )
+                          }
+                          className="
+                            absolute
+                            right-3
+                            top-1/2
+                            -translate-y-1/2
+                            text-white/40
+                            hover:text-white/80
+                            transition-colors
+                          "
+                          aria-label={
+                            showPassword
+                              ? 'Hide password'
+                              : 'Show password'
+                          }
+                        >
+                          {showPassword ? (
+                            <EyeOff
+                              className="w-4 h-4"
+                            />
+                          ) : (
+                            <Eye
+                              className="w-4 h-4"
+                            />
+                          )}
+                        </button>
+
+                      </div>
+
+                    </div>
+
+                    {/* REMEMBER ME */}
+
+                    <div
+                      className="
+                        flex
+                        items-center
+                      "
+                    >
+
+                      <label
+                        className="
+                          flex
+                          items-center
+                          gap-2
+                          cursor-pointer
+                          select-none
+                        "
+                      >
+
+                        <input
+                          type="checkbox"
+                          name="rememberMe"
+                          checked={
+                            formData.rememberMe
+                          }
+                          onChange={handleChange}
+                          className="
+                            h-3.5
+                            w-3.5
+                            rounded
+                            border-white/30
+                            text-brand-600
+                            focus:ring-brand-500
+                            bg-white/10
+                          "
+                        />
+
+                        <span
+                          className="
+                            text-xs
+                            text-white/55
+                          "
+                        >
+                          Remember me
+                        </span>
+
+                      </label>
+
+                    </div>
+
+                    {/* SIGN IN + BIOMETRIC */}
+
+                    <div
+                      className="
+                        flex
+                        gap-2
+                        pt-0.5
+                      "
+                    >
+
+                      {/* SIGN IN */}
+
                       <button
-                        type="button"
-                        onClick={
-                          handleBiometricLogin
-                        }
+                        type="submit"
                         disabled={
                           loading ||
                           biometricLoading
                         }
                         className="
-                          w-[52px]
-                          flex-shrink-0
+                          flex-1
                           py-2.5
-                          px-3
-                          border
-                          border-brand-500/30
-                          bg-brand-500/5
-                          text-brand-700
-                          dark:text-brand-300
-                          rounded-lg
-                          hover:bg-brand-500/10
-                          hover:border-brand-500/50
+                          px-4
+                          bg-brand-600
+                          hover:bg-brand-500
+                          text-white
+                          font-semibold
+                          text-sm
+                          rounded-xl
+                          shadow-lg
+                          shadow-brand-600/30
+                          hover:scale-[1.01]
+                          active:scale-[0.99]
                           transition-all
                           flex
                           items-center
                           justify-center
+                          gap-2
                           disabled:opacity-50
                           disabled:cursor-not-allowed
+                          disabled:hover:scale-100
                         "
-                        title="Login with fingerprint or device biometric"
-                        aria-label="Login with fingerprint or biometric"
                       >
 
-                        {biometricLoading ? (
-                          <Loader2
-                            className="
-                              w-5
-                              h-5
-                              animate-spin
-                            "
-                          />
+                        {loading ? (
+                          <>
+                            <Loader2
+                              className="
+                                w-4
+                                h-4
+                                animate-spin
+                              "
+                            />
+
+                            <span>
+                              Authenticating...
+                            </span>
+                          </>
                         ) : (
-                          <Fingerprint
-                            className="w-5 h-5"
-                          />
+                          <>
+                            <span>
+                              Sign In
+                            </span>
+
+                            <ArrowRight
+                              className="w-4 h-4"
+                            />
+                          </>
                         )}
 
                       </button>
-                    )}
 
-                  </div>
+                      {/* BIOMETRIC */}
 
+                      {isBiometricAvailable() && (
+                        <button
+                          type="button"
+                          onClick={
+                            handleBiometricLogin
+                          }
+                          disabled={
+                            loading ||
+                            biometricLoading
+                          }
+                          className="
+                            w-[46px]
+                            flex-shrink-0
+                            py-2.5
+                            px-2.5
+                            border
+                            border-brand-400/30
+                            bg-brand-500/10
+                            backdrop-blur-md
+                            text-brand-200
+                            rounded-xl
+                            hover:bg-brand-500/20
+                            hover:border-brand-400/50
+                            transition-all
+                            flex
+                            items-center
+                            justify-center
+                            disabled:opacity-50
+                            disabled:cursor-not-allowed
+                          "
+                          title="Login with fingerprint or device biometric"
+                          aria-label="Login with fingerprint or biometric"
+                        >
 
-                  {/* BIOMETRIC NOTE */}
+                          {biometricLoading ? (
+                            <Loader2
+                              className="
+                                w-4.5
+                                h-4.5
+                                animate-spin
+                              "
+                            />
+                          ) : (
+                            <Fingerprint
+                              className="w-5 h-5"
+                            />
+                          )}
 
-                  {isBiometricAvailable() && (
-                    <p
-                      className="
-                        text-center
-                        text-xs
-                        text-gray-400
-                        dark:text-gray-500
-                      "
-                    >
-                      Use your device's secure biometric authenticator.
-                    </p>
-                  )}
+                        </button>
+                      )}
 
+                    </div>
 
-                  {/* REGISTER */}
+                    {/* BIOMETRIC NOTE */}
 
-                  <div
-                    className="
-                      pt-3
-                      border-t
-                      border-gray-200
-                      dark:border-dark-border
-                      text-center
-                    "
-                  >
-
-                    <p
-                      className="
-                        text-sm
-                        text-gray-500
-                        dark:text-gray-400
-                      "
-                    >
-                      Don't have an account?{' '}
-
-                      <Link
-                        to="/signup"
+                    {isBiometricAvailable() && (
+                      <p
                         className="
-                          font-semibold
-                          text-brand-600
-                          dark:text-brand-400
-                          hover:text-brand-500
-                          transition-colors
+                          text-center
+                          text-[10px]
+                          text-white/40
                         "
                       >
-                        Create an account
-                      </Link>
+                        Use your device's secure biometric authenticator.
+                      </p>
+                    )}
 
-                    </p>
+                    {/* REGISTER */}
 
-                  </div>
+                    <div
+                      className="
+                        pt-2.5
+                        border-t
+                        border-white/15
+                        text-center
+                      "
+                    >
 
-                </form>
+                      <p
+                        className="
+                          text-xs
+                          text-white/50
+                        "
+                      >
+                        Don't have an account?{' '}
 
-              )}
+                        <Link
+                          to="/signup"
+                          className="
+                            font-semibold
+                            text-brand-300
+                            hover:text-brand-200
+                            transition-colors
+                          "
+                        >
+                          Create an account
+                        </Link>
+
+                      </p>
+
+                    </div>
+
+                  </form>
+
+                )}
+
+              </div>
 
             </div>
 
           </div>
 
-        </div>
+        </main>
 
-      </main>
+        <Footer />
 
+      </div>
 
-      <Footer />
-
-    </div>
+    </BackgroundSlider>
   );
 };
 
