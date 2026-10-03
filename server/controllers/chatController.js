@@ -743,22 +743,11 @@ const markRoomMessagesRead = async (
   try {
     const { roomId } = req.params;
     const userId = req.user._id;
-    const throughMessageId =
-      req.body?.throughMessageId ||
-      req.query?.throughMessageId ||
-      null;
 
     if (!isValidObjectId(roomId)) {
       return res.status(400).json({
         success: false,
         error: 'Invalid room ID.'
-      });
-    }
-
-    if (throughMessageId && !isValidObjectId(throughMessageId)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid read-position message ID.'
       });
     }
 
@@ -793,39 +782,8 @@ const markRoomMessagesRead = async (
       deleted_for: { $ne: userId }
     };
 
-    let readFilter = { ...unreadFilter };
-
-    if (throughMessageId) {
-      const boundary = await Message.findOne({
-        room: room._id,
-        is_deleted: false,
-        deleted_for: { $ne: userId },
-        _id: throughMessageId
-      })
-        .select('_id createdAt')
-        .lean();
-
-      if (!boundary) {
-        return res.status(400).json({
-          success: false,
-          error: 'Read-position message does not belong to this conversation.'
-        });
-      }
-
-      readFilter = {
-        ...unreadFilter,
-        $or: [
-          { createdAt: { $lt: boundary.createdAt } },
-          {
-            createdAt: boundary.createdAt,
-            _id: { $lte: boundary._id }
-          }
-        ]
-      };
-    }
-
     const updateResult = await Message.updateMany(
-      readFilter,
+      unreadFilter,
       {
         $push: {
           read_by: {
@@ -846,16 +804,17 @@ const markRoomMessagesRead = async (
       (item) => item.roomId === roomId.toString()
     );
 
+    const unreadCount =
+      currentRoom?.unreadCount || 0;
+
     res.status(200).json({
       success: true,
       data: {
         roomId: roomId.toString(),
-        markedRead: updateResult.modifiedCount || 0,
-        unreadCount: currentRoom?.unreadCount || 0,
+        markedRead:
+          updateResult.modifiedCount || 0,
+        unreadCount,
         totalUnread: unreadData.totalUnread,
-        throughMessageId: throughMessageId
-          ? throughMessageId.toString()
-          : null,
         recipientId:
           room.type === 'direct'
             ? room.members.find(
@@ -1057,8 +1016,7 @@ const getRoomMessages = async (
 ) => {
   try {
     const { roomId } = req.params;
-    const { page, limit, skip } =
-      getPagination(req);
+    const { page, limit, skip } = getPagination(req);
 
     if (!isValidObjectId(roomId)) {
       return res.status(400).json({
@@ -1098,24 +1056,32 @@ const getRoomMessages = async (
       deleted_for: { $ne: userId }
     };
 
+    /*
+     * Establish the exact read boundary for this user.
+     *
+     * When unread messages exist, the last message immediately before
+     * the first unread message is the last-read message. If there are
+     * no unread messages, the latest visible message is the read
+     * boundary. This lets the frontend reopen the conversation from
+     * the correct position instead of starting at page 1.
+     */
     const unreadFilter = {
-      ...filter,
+      room: room._id,
+      is_deleted: false,
+      deleted_for: { $ne: userId },
       sender: { $ne: userId },
       'read_by.user': { $ne: userId }
     };
 
-    const [
-      totalMessages,
-      unreadCount,
-      firstUnreadMessage
-    ] = await Promise.all([
-      Message.countDocuments(filter),
-      Message.countDocuments(unreadFilter),
-      Message.findOne(unreadFilter)
-        .select('_id createdAt sender')
-        .sort({ createdAt: 1, _id: 1 })
-        .lean()
-    ]);
+    const firstUnreadMessage = await Message.findOne(
+      unreadFilter
+    )
+      .select('_id createdAt sender')
+      .sort({
+        createdAt: 1,
+        _id: 1
+      })
+      .lean();
 
     let lastReadMessage = null;
 
@@ -1123,29 +1089,56 @@ const getRoomMessages = async (
       lastReadMessage = await Message.findOne({
         ...filter,
         $or: [
-          { createdAt: { $lt: firstUnreadMessage.createdAt } },
+          {
+            createdAt: {
+              $lt: firstUnreadMessage.createdAt
+            }
+          },
           {
             createdAt: firstUnreadMessage.createdAt,
-            _id: { $lt: firstUnreadMessage._id }
+            _id: {
+              $lt: firstUnreadMessage._id
+            }
           }
         ]
       })
         .select('_id createdAt')
-        .sort({ createdAt: -1, _id: -1 })
+        .sort({
+          createdAt: -1,
+          _id: -1
+        })
         .lean();
     } else {
       lastReadMessage = await Message.findOne(filter)
         .select('_id createdAt')
-        .sort({ createdAt: -1, _id: -1 })
+        .sort({
+          createdAt: -1,
+          _id: -1
+        })
         .lean();
     }
 
-    const aroundMessageId = req.query.aroundMessageId;
-    let historyFilter = { ...filter };
-    let anchor = null;
+    const unreadCount = await Message.countDocuments(
+      unreadFilter
+    );
 
-    if (aroundMessageId && isValidObjectId(aroundMessageId)) {
-      anchor = await Message.findOne({
+    /*
+     * Optional anchor supplied by ChatRoom when it wants the history
+     * from the user's last-read boundary onward.
+     */
+    const aroundMessageId = req.query.aroundMessageId;
+
+    let historyFilter = {
+      ...filter
+    };
+
+    const hasAnchor = Boolean(
+      aroundMessageId &&
+      isValidObjectId(aroundMessageId)
+    );
+
+    if (hasAnchor) {
+      const anchor = await Message.findOne({
         ...filter,
         _id: aroundMessageId
       })
@@ -1156,6 +1149,69 @@ const getRoomMessages = async (
         historyFilter = {
           ...filter,
           $or: [
+            {
+              createdAt: {
+                $gt: anchor.createdAt
+              }
+            },
+            {
+              createdAt: anchor.createdAt,
+              _id: {
+                $gte: anchor._id
+              }
+            }
+          ]
+        };
+      }
+    }
+
+    const totalMessages = await Message.countDocuments(filter);
+
+    const buildPopulatedQuery = (queryFilter) =>
+      Message.find(queryFilter)
+        .populate(
+          'sender',
+          'username avatar role email'
+        )
+        .populate(
+          'recipient',
+          'username avatar role email'
+        )
+        .populate({
+          path: 'reply_to',
+          select: 'content message_type sender createdAt',
+          populate: {
+            path: 'sender',
+            select: 'username avatar'
+          }
+        });
+
+    let messages;
+    let historyTotal = totalMessages;
+
+    if (hasAnchor && historyFilter.$or) {
+      const anchor = await Message.findOne({
+        ...filter,
+        _id: aroundMessageId
+      })
+        .select('_id createdAt')
+        .lean();
+
+      if (anchor) {
+        const beforeFilter = {
+          ...filter,
+          $or: [
+            { createdAt: { $lt: anchor.createdAt } },
+            {
+              createdAt: anchor.createdAt,
+              _id: { $lt: anchor._id }
+            }
+          ]
+        };
+
+        const afterFilter = {
+          ...filter,
+          $or: [
             { createdAt: { $gt: anchor.createdAt } },
             {
               createdAt: anchor.createdAt,
@@ -1163,32 +1219,28 @@ const getRoomMessages = async (
             }
           ]
         };
+
+        const beforeMessages = await buildPopulatedQuery(beforeFilter)
+          .sort({ createdAt: -1, _id: -1 })
+          .limit(100)
+          .lean();
+
+        const afterMessages = await buildPopulatedQuery(afterFilter)
+          .sort({ createdAt: 1, _id: 1 })
+          .limit(100)
+          .lean();
+
+        messages = [...beforeMessages.reverse(), ...afterMessages];
+      } else {
+        messages = await buildPopulatedQuery(filter)
+          .sort({ createdAt: -1, _id: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean();
+        messages.reverse();
       }
-    }
-
-    const historyTotal = await Message.countDocuments(historyFilter);
-
-    const query = Message.find(historyFilter)
-      .populate('sender', 'username avatar role email')
-      .populate('recipient', 'username avatar role email')
-      .populate({
-        path: 'reply_to',
-        select: 'content message_type sender createdAt',
-        populate: {
-          path: 'sender',
-          select: 'username avatar'
-        }
-      });
-
-    let messages;
-
-    if (anchor) {
-      messages = await query
-        .sort({ createdAt: 1, _id: 1 })
-        .limit(Math.min(Math.max(limit, 1), 100))
-        .lean();
     } else {
-      messages = await query
+      messages = await buildPopulatedQuery(filter)
         .sort({ createdAt: -1, _id: -1 })
         .skip(skip)
         .limit(limit)
@@ -1196,16 +1248,16 @@ const getRoomMessages = async (
       messages.reverse();
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       count: messages.length,
       pagination: {
         page,
         limit,
-        totalPages: Math.ceil(historyTotal / limit),
-        totalMessages,
-        anchorMode: anchor ? 'around' : 'latest',
-        anchorMessageId: anchor?._id?.toString() || null
+        totalPages: Math.ceil(
+          historyTotal / limit
+        ),
+        totalMessages
       },
       readState: {
         unreadCount,
@@ -1213,7 +1265,8 @@ const getRoomMessages = async (
           firstUnreadMessage?._id?.toString() || null,
         lastReadMessageId:
           lastReadMessage?._id?.toString() || null,
-        lastReadAt: lastReadMessage?.createdAt || null
+        lastReadAt:
+          lastReadMessage?.createdAt || null
       },
       data: messages
     });
@@ -1534,13 +1587,8 @@ const getDirectMessages = async (
         filter
       );
 
-    const historyTotal =
-      await Message.countDocuments(
-        historyFilter
-      );
-
-    const query =
-      Message.find(historyFilter)
+    const buildPopulatedQuery = (queryFilter) =>
+      Message.find(queryFilter)
         .populate(
           'sender',
           'username avatar role email'
@@ -1555,36 +1603,106 @@ const getDirectMessages = async (
             'content message_type sender createdAt',
           populate: {
             path: 'sender',
-            select:
-              'username avatar'
+            select: 'username avatar'
           }
         });
 
     let messages;
+    let historyTotal = totalMessages;
 
     if (
       hasAnchor &&
       historyFilter.$or
     ) {
-      messages =
-        await query
-          .sort({
-            createdAt: 1,
-            _id: 1
-          })
-          .limit(
-            Math.min(
-              Math.max(
-                limit,
-                1
-              ),
-              100
-            )
+      const anchor =
+        await Message.findOne({
+          ...filter,
+          _id: aroundMessageId
+        })
+          .select(
+            '_id createdAt'
           )
           .lean();
+
+      if (anchor) {
+        const beforeFilter = {
+          ...filter,
+          $or: [
+            {
+              createdAt: {
+                $lt: anchor.createdAt
+              }
+            },
+            {
+              createdAt:
+                anchor.createdAt,
+              _id: {
+                $lt: anchor._id
+              }
+            }
+          ]
+        };
+
+        const afterFilter = {
+          ...filter,
+          $or: [
+            {
+              createdAt: {
+                $gt: anchor.createdAt
+              }
+            },
+            {
+              createdAt:
+                anchor.createdAt,
+              _id: {
+                $gte: anchor._id
+              }
+            }
+          ]
+        };
+
+        const beforeMessages =
+          await buildPopulatedQuery(
+            beforeFilter
+          )
+            .sort({
+              createdAt: -1,
+              _id: -1
+            })
+            .limit(100)
+            .lean();
+
+        const afterMessages =
+          await buildPopulatedQuery(
+            afterFilter
+          )
+            .sort({
+              createdAt: 1,
+              _id: 1
+            })
+            .limit(100)
+            .lean();
+
+        messages = [
+          ...beforeMessages.reverse(),
+          ...afterMessages
+        ];
+      } else {
+        messages =
+          await buildPopulatedQuery(filter)
+            .sort({
+              createdAt: -1,
+              _id: -1
+            })
+            .skip(skip)
+            .limit(limit)
+            .lean();
+
+        messages.reverse();
+      }
     } else {
       messages =
-        await query
+        await buildPopulatedQuery(filter)
           .sort({
             createdAt: -1,
             _id: -1

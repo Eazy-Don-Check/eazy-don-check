@@ -611,10 +611,22 @@ const sendPersistentNotification =
 // ONE-TO-ONE CALL HELPERS
 // ============================================================
 
+const clearPendingCallTimer = (callId) => {
+  const key = String(callId);
+  const pending = pendingCalls.get(key);
+
+  if (pending?.timer) {
+    clearTimeout(pending.timer);
+    pending.timer = null;
+  }
+
+  return pending || null;
+};
+
 const clearPendingCall = (callId) => {
-  const pending = pendingCalls.get(callId);
-  if (pending?.timer) clearTimeout(pending.timer);
-  pendingCalls.delete(callId);
+  const key = String(callId);
+  const pending = clearPendingCallTimer(key);
+  pendingCalls.delete(key);
   return pending;
 };
 
@@ -769,23 +781,6 @@ module.exports =
             isOnline: true
           }
         );
-
-        // ------------------------------------------------------
-        // Allow a connected client to query the authoritative
-        // real-time presence of another user. This is important
-        // when a DM is opened after the other user was already
-        // online, because the original online event may have
-        // happened before this client started listening.
-        // ------------------------------------------------------
-        socket.on('get_user_online_status', ({ userId: targetUserId } = {}) => {
-          if (!targetUserId) return;
-
-          const normalizedTargetId = String(targetUserId);
-          socket.emit('user_online_status', {
-            userId: normalizedTargetId,
-            isOnline: onlineUsers.has(normalizedTargetId)
-          });
-        });
 
         // Re-deliver any still-ringing call when the recipient reconnects.
         for (const pending of pendingCalls.values()) {
@@ -1354,6 +1349,19 @@ module.exports =
                 );
 
               // ------------------------------------------------
+              // Confirm to sender immediately.
+              // Do not wait for recipient notifications or unread
+              // count calculations, otherwise the sender can see
+              // the recipient receive the message before seeing
+              // the message in their own conversation.
+              // ------------------------------------------------
+
+              socket.emit(
+                'direct_message_sent',
+                dmMessage
+              );
+
+              // ------------------------------------------------
               // Deliver to recipient
               // ------------------------------------------------
 
@@ -1450,14 +1458,6 @@ if (recipientId) {
   );
 }
 
-              // ------------------------------------------------
-              // Confirm to sender
-              // ------------------------------------------------
-
-              socket.emit(
-                'direct_message_sent',
-                dmMessage
-              );
             } catch (error) {
               console.error(
                 '❌ Error sending direct message:',
@@ -1482,19 +1482,17 @@ if (recipientId) {
         socket.on(
   'mark_messages_read',
   async ({
-    roomId,
-    throughMessageId = null
+    roomId
   } = {}) => {
     try {
       if (!roomId) {
         return;
       }
 
-      if (throughMessageId && !mongoose.Types.ObjectId.isValid(throughMessageId)) {
-        return;
-      }
-
-      const room = await Room.findById(roomId);
+      const room =
+        await Room.findById(
+          roomId
+        );
 
       if (!room) {
         return;
@@ -1502,85 +1500,114 @@ if (recipientId) {
 
       if (
         !userIsSuperAdmin(socket.user) &&
-        !userIsRoomMember(room, userId)
+        !userIsRoomMember(
+          room,
+          userId
+        )
       ) {
         return;
       }
 
-      const unreadFilter = {
-        room: roomId,
-        'read_by.user': { $ne: userId },
-        sender: { $ne: userId },
-        is_deleted: false,
-        deleted_for: { $ne: userId }
-      };
+      // --------------------------------------------------------
+      // Find unread incoming messages
+      // --------------------------------------------------------
 
-      let readFilter = { ...unreadFilter };
-
-      if (throughMessageId) {
-        const boundary = await Message.findOne({
+      const unreadMessages =
+        await Message.find({
           room: roomId,
-          _id: throughMessageId,
-          is_deleted: false,
-          deleted_for: { $ne: userId }
-        })
-          .select('_id createdAt')
-          .lean();
 
-        if (!boundary) {
-          return;
-        }
+          'read_by.user': {
+            $ne: userId
+          },
 
-        readFilter = {
-          ...unreadFilter,
-          $or: [
-            { createdAt: { $lt: boundary.createdAt } },
-            {
-              createdAt: boundary.createdAt,
-              _id: { $lte: boundary._id }
+          sender: {
+            $ne: userId
+          },
+
+          is_deleted: false
+        }).select('_id');
+
+      // --------------------------------------------------------
+      // Mark messages as read
+      // --------------------------------------------------------
+
+      if (
+        unreadMessages.length >
+        0
+      ) {
+        await Message.updateMany(
+          {
+            _id: {
+              $in:
+                unreadMessages.map(
+                  (message) =>
+                    message._id
+                )
             }
-          ]
-        };
-      }
+          },
+          {
+            $push: {
+              read_by: {
+                user:
+                  userId,
 
-      const updateResult = await Message.updateMany(
-        readFilter,
-        {
-          $push: {
-            read_by: {
-              user: userId,
-              read_at: new Date()
+                read_at:
+                  new Date()
+              }
             }
           }
-        }
-      );
+        );
+      }
 
-      const unreadData = await getUserUnreadCounts(userId);
-      const currentRoom = unreadData.rooms.find(
-        (item) => item.roomId === roomId.toString()
-      );
+      // --------------------------------------------------------
+      // Recalculate authoritative unread counts
+      // --------------------------------------------------------
+
+      const unreadData =
+        await getUserUnreadCounts(
+          userId
+        );
+
+      // --------------------------------------------------------
+      // Send updated count to the user who opened the room
+      // --------------------------------------------------------
 
       socket.emit(
         'unread_message_count',
         {
-          roomId: roomId.toString(),
-          unreadCount: currentRoom?.unreadCount || 0,
-          totalUnread: unreadData.totalUnread,
-          rooms: unreadData.rooms,
-          throughMessageId: throughMessageId || null,
-          markedRead: updateResult.modifiedCount || 0
+          roomId:
+            roomId.toString(),
+
+          unreadCount: 0,
+
+          totalUnread:
+            unreadData.totalUnread,
+
+          rooms:
+            unreadData.rooms
         }
       );
 
-      socket.to(`room:${roomId}`).emit(
-        'messages_read_update',
-        {
-          roomId: roomId.toString(),
-          readByUserId: userId,
-          unreadCount: currentRoom?.unreadCount || 0,
-          throughMessageId: throughMessageId || null
-        }
-      );
+      // --------------------------------------------------------
+      // Tell other sockets/users in this room that messages
+      // were read.
+      // --------------------------------------------------------
+
+      socket
+        .to(`room:${roomId}`)
+        .emit(
+          'messages_read_update',
+          {
+            roomId:
+              roomId.toString(),
+
+            readByUserId:
+              userId,
+
+            unreadCount: 0
+          }
+        );
+
     } catch (error) {
       console.error(
         '❌ Error marking messages read:',
@@ -1589,6 +1616,7 @@ if (recipientId) {
     }
   }
 );
+
 
         // ======================================================
         // TYPING START
@@ -1767,7 +1795,11 @@ if (recipientId) {
           if (!pending || pending.targetUserId !== userId) return;
 
           pending.accepted = true;
-          clearPendingCall(String(callId));
+
+          // Stop the ringing timeout, but keep the call state alive.
+          // WebRTC offer/answer/ICE signaling still needs this record
+          // until the call is explicitly ended or disconnected.
+          clearPendingCallTimer(String(callId));
 
           io.to(`user:${pending.callerId}`).emit('call_accepted', {
             callId: pending.callId,
@@ -1884,30 +1916,24 @@ if (recipientId) {
 
         await message.save();
         const fullMessage = await populateMessage(message._id);
-        const payload = { ...fullMessage, reactions: fullMessage.reactions || [] };
+        const messageObject = fullMessage?.toObject
+          ? fullMessage.toObject()
+          : fullMessage;
+
+        const payload = {
+          ...messageObject,
+          _id: message._id.toString(),
+          roomId: room._id.toString(),
+          reactions: Array.isArray(messageObject?.reactions)
+            ? messageObject.reactions
+            : []
+        };
 
         if (room.type === 'public' || room.type === 'private') {
           io.to(`room:${room._id}`).emit('message_reaction_updated', payload);
           io.to(`user:${userId}`).emit('message_reaction_updated', payload);
         } else {
-          // Direct-message rooms must notify both participants explicitly.
-          // Do not rely only on room.members because older/direct rooms may
-          // have an incomplete member list.
-          const participantIds = new Set([
-            message.sender?.toString?.() || String(message.sender || ''),
-            message.recipient?.toString?.() || String(message.recipient || ''),
-            ...(Array.isArray(room.members)
-              ? room.members.map((memberId) =>
-                  memberId?.toString?.() || String(memberId || '')
-                )
-              : [])
-          ]);
-
-          participantIds.forEach((memberId) => {
-            if (memberId) {
-              io.to(`user:${memberId}`).emit('message_reaction_updated', payload);
-            }
-          });
+          room.members.forEach((memberId) => io.to(`user:${memberId}`).emit('message_reaction_updated', payload));
         }
       } catch (error) {
         console.error('❌ Error toggling message reaction:', error);
@@ -2027,6 +2053,7 @@ if (recipientId) {
             const callId = activeCalls.get(userId);
             if (callId) {
               const pending = pendingCalls.get(callId);
+
               if (pending && !pending.accepted) {
                 if (pending.callerId === userId) {
                   await createMissedCall(io, pending, 'caller_offline');
@@ -2036,7 +2063,30 @@ if (recipientId) {
                     reason: 'recipient_offline'
                   });
                 }
+              } else if (pending && pending.accepted) {
+                // An accepted call must also be cleaned up if either
+                // participant disconnects while WebRTC is active.
+                clearPendingCall(String(callId));
+
+                const peerId =
+                  pending.callerId === userId
+                    ? pending.targetUserId
+                    : pending.callerId;
+
+                io.to(`user:${peerId}`).emit('call_ended', {
+                  callId: pending.callId,
+                  peerId: userId,
+                  reason: 'peer_disconnected'
+                });
+
+                if (activeCalls.get(pending.callerId) === pending.callId) {
+                  activeCalls.delete(pending.callerId);
+                }
+                if (activeCalls.get(pending.targetUserId) === pending.callId) {
+                  activeCalls.delete(pending.targetUserId);
+                }
               }
+
               activeCalls.delete(userId);
             }
 
