@@ -566,11 +566,7 @@ const startRegistration = async (
       });
     }
 
-    if (
-      !isValidEmail(
-        normalizedEmail
-      )
-    ) {
+    if (!isValidEmail(normalizedEmail)) {
       return res.status(400).json({
         success: false,
         message:
@@ -578,11 +574,7 @@ const startRegistration = async (
       });
     }
 
-    if (
-      !isValidPhone(
-        normalizedPhone
-      )
-    ) {
+    if (!isValidPhone(normalizedPhone)) {
       return res.status(400).json({
         success: false,
         message:
@@ -598,9 +590,7 @@ const startRegistration = async (
       });
     }
 
-    if (
-      password.length > 128
-    ) {
+    if (password.length > 128) {
       return res.status(400).json({
         success: false,
         message:
@@ -616,15 +606,11 @@ const startRegistration = async (
       User.findOne({
         email: normalizedEmail,
       }),
-
       User.findOne({
-        username:
-          normalizedUsername,
+        username: normalizedUsername,
       }),
-
       User.findOne({
-        phone:
-          normalizedPhone,
+        phone: normalizedPhone,
       }),
     ]);
 
@@ -652,138 +638,109 @@ const startRegistration = async (
       });
     }
 
-    await PendingRegistration.deleteMany({
-      $or: [
-        {
-          email:
-            normalizedEmail,
-        },
-        {
-          username:
-            normalizedUsername,
-        },
-        {
-          phone:
-            normalizedPhone,
-        },
-      ],
+    /*
+     * SIGNUP IS NOW VERIFICATION-FREE.
+     *
+     * The previous flow stored the registration in PendingRegistration
+     * and required an email/phone OTP before creating the User.
+     *
+     * The new flow creates the User immediately. Password hashing is left
+     * to the User model's normal pre-save hook, exactly as normal account
+     * creation should work.
+     */
+    const user = new User({
+      name: String(name).trim(),
+      username: normalizedUsername,
+      email: normalizedEmail,
+      phone: normalizedPhone,
+      password,
+      location: String(location || '').trim(),
+      gender: String(gender || 'Not specified').trim(),
+      relationshipStatus: String(
+        relationshipStatus || 'Single'
+      ).trim(),
+      education: {
+        highestQualification: String(
+          education?.highestQualification || ''
+        ).trim(),
+        institution: String(
+          education?.institution || ''
+        ).trim(),
+        courseOfStudy: String(
+          education?.courseOfStudy || ''
+        ).trim(),
+        graduationYear: String(
+          education?.graduationYear || ''
+        ).trim(),
+      },
+      avatarUrl: String(avatarUrl || '').trim(),
+      accountStatus: 'active',
+      registrationVerified: true,
+      gamification: {
+        emailVerified: false,
+        phoneVerified: false,
+        xpPoints: 0,
+        profileCompletion: 0,
+        starRank: 'Bronze',
+      },
     });
 
-    const passwordHash =
-      await bcrypt.hash(
-        password,
-        10
-      );
+    await user.save();
 
-    const pending =
-      await PendingRegistration.create({
-        name:
-          String(name).trim(),
-
-        username:
-          normalizedUsername,
-
-        email:
-          normalizedEmail,
-
-        phone:
-          normalizedPhone,
-
-        passwordHash,
-
-        location:
-          String(
-            location || ''
-          ).trim(),
-
-        gender:
-          String(
-            gender ||
-              'Not specified'
-          ).trim(),
-
-        relationshipStatus:
-          String(
-            relationshipStatus ||
-              'Single'
-          ).trim(),
-
-        education: {
-          highestQualification:
-            String(
-              education
-                ?.highestQualification ||
-                ''
-            ).trim(),
-
-          institution:
-            String(
-              education
-                ?.institution ||
-                ''
-            ).trim(),
-
-          courseOfStudy:
-            String(
-              education
-                ?.courseOfStudy ||
-                ''
-            ).trim(),
-
-          graduationYear:
-            String(
-              education
-                ?.graduationYear ||
-                ''
-            ).trim(),
+    /*
+     * Remove any stale OTP/pending records for these registration details.
+     * This keeps the database clean if an earlier signup attempt was
+     * abandoned before verification was removed.
+     */
+    await Promise.all([
+      PendingRegistration.deleteMany({
+        $or: [
+          { email: normalizedEmail },
+          { username: normalizedUsername },
+          { phone: normalizedPhone },
+        ],
+      }),
+      OtpVerification.deleteMany({
+        purpose: 'SIGNUP',
+        destination: {
+          $in: [
+            normalizedEmail,
+            normalizedPhone,
+          ],
         },
-
-        avatarUrl:
-          String(
-            avatarUrl || ''
-          ).trim(),
-
-        expiresAt:
-          new Date(
-            Date.now() +
-              30 * 60 * 1000
-          ),
-      });
+      }),
+    ]);
 
     return res.status(201).json({
       success: true,
       message:
-        'Registration details accepted. Please verify your identity with an OTP.',
+        'Account created successfully. You can now log in with your credentials.',
       data: {
-        registrationId:
-          pending._id,
-        email:
-          maskEmail(
-            pending.email
-          ),
-        phone:
-          maskPhone(
-            pending.phone
-          ),
-        availableChannels: [
-          'email',
-          'phone',
-        ],
+        _id: user._id,
+        name: user.name,
+        username: user.username,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        accountStatus: user.accountStatus,
+        registrationVerified:
+          user.registrationVerified,
+        gamification: user.gamification,
+        avatar: user.avatar,
+        avatarUrl: user.avatarUrl,
       },
     });
   } catch (error) {
     console.error(
-      'Start registration error:',
+      'Registration error:',
       error
     );
 
-    if (
-      error.code === 11000
-    ) {
+    if (error.code === 11000) {
       return res.status(409).json({
         success: false,
         message:
-          'An account or registration with these details already exists.',
+          'An account with these details already exists.',
       });
     }
 
@@ -794,7 +751,6 @@ const startRegistration = async (
     });
   }
 };
-
 const registerUser = startRegistration;
 
 // ============================================================
