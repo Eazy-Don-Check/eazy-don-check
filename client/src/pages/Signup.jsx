@@ -1,5 +1,5 @@
 import React, {
-  useEffect,
+  useRef,
   useState,
 } from 'react';
 
@@ -22,9 +22,6 @@ import {
   AlertCircle,
   Loader2,
   CheckCircle2,
-  Smartphone,
-  RefreshCw,
-  KeyRound,
 } from 'lucide-react';
 
 import Navbar from '../components/layout/Navbar';
@@ -35,7 +32,7 @@ import apiClient from '../utils/apiClient';
 
 const Signup = () => {
 
-  const totalSteps = 6;
+  const totalSteps = 5;
 
   const [step, setStep] =
     useState(1);
@@ -58,45 +55,7 @@ const Signup = () => {
       avatarUrl: '',
     });
 
-  const [
-    registrationId,
-    setRegistrationId,
-  ] = useState('');
-
-  const [
-    verificationChannel,
-    setVerificationChannel,
-  ] = useState('');
-
-  const [
-    maskedDestination,
-    setMaskedDestination,
-  ] = useState('');
-
-  const [
-    otp,
-    setOtp,
-  ] = useState('');
-
-  const [
-    otpSent,
-    setOtpSent,
-  ] = useState(false);
-
-  const [
-    resendAvailableAt,
-    setResendAvailableAt,
-  ] = useState(null);
-
-  const [
-    countdown,
-    setCountdown,
-  ] = useState(0);
-
-  const [
-    verified,
-    setVerified,
-  ] = useState(false);
+  const fileInputRef = useRef(null);
 
   const [
     error,
@@ -115,57 +74,6 @@ const Signup = () => {
 
   const navigate =
     useNavigate();
-
-
-  // ==========================================================
-  // COUNTDOWN
-  // ==========================================================
-
-  useEffect(() => {
-
-    if (!resendAvailableAt) {
-      setCountdown(0);
-      return undefined;
-    }
-
-    const timer =
-      window.setInterval(() => {
-
-        const remaining =
-          Math.max(
-            0,
-            Math.ceil(
-              (resendAvailableAt -
-                Date.now()) /
-                1000
-            )
-          );
-
-        setCountdown(
-          remaining
-        );
-
-        if (remaining <= 0) {
-
-          window.clearInterval(
-            timer
-          );
-
-          setResendAvailableAt(
-            null
-          );
-        }
-
-      }, 1000);
-
-    return () =>
-      window.clearInterval(
-        timer
-      );
-
-  }, [
-    resendAvailableAt,
-  ]);
 
 
   // ==========================================================
@@ -190,6 +98,63 @@ const Signup = () => {
 
     setError('');
     setSuccess('');
+  };
+
+
+  // ==========================================================
+  // PROFILE PICTURE
+  // ==========================================================
+
+  const handleAvatarSelect = (
+    event
+  ) => {
+
+    const file =
+      event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file.');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Profile picture must be 10 MB or smaller.');
+      return;
+    }
+
+    const reader =
+      new FileReader();
+
+    reader.onload = () => {
+
+      setFormData(
+        (previous) => ({
+          ...previous,
+          avatarUrl:
+            String(
+              reader.result || ''
+            ),
+        })
+      );
+
+      setError('');
+      setSuccess('Profile picture selected successfully.');
+    };
+
+    reader.onerror = () => {
+      setError('Unable to read the selected picture.');
+    };
+
+    reader.readAsDataURL(file);
+  };
+
+
+  const openAvatarPicker = () => {
+    fileInputRef.current?.click();
   };
 
 
@@ -317,27 +282,6 @@ const Signup = () => {
 
   const prevStep = () => {
 
-    if (step === 6) {
-
-      /*
-       * Do not allow going backward after
-       * the OTP registration request has started.
-       *
-       * This prevents changing registration data
-       * after the backend has created the pending
-       * registration.
-       */
-
-      if (registrationId) {
-
-        setError(
-          'Please complete identity verification before leaving this step.'
-        );
-
-        return;
-      }
-    }
-
     setError('');
 
     setStep(
@@ -351,7 +295,8 @@ const Signup = () => {
 
 
   // ==========================================================
-  // START REGISTRATION
+  // CREATE ACCOUNT
+
   // ==========================================================
 
   const startRegistration =
@@ -365,14 +310,13 @@ const Signup = () => {
 
         const response =
           await apiClient.post(
-            '/auth/register/start',
+            '/auth/register',
             {
               name:
                 formData.name.trim(),
 
               username:
-                formData.username
-                  .trim(),
+                formData.username.trim(),
 
               email:
                 formData.email
@@ -409,290 +353,45 @@ const Signup = () => {
               },
 
               avatarUrl:
-                formData.avatarUrl
-                  .trim(),
+                formData.avatarUrl,
             }
           );
 
         const data =
           response?.data || {};
 
-        if (
-          data.success === false
-        ) {
-
+        if (data.success === false) {
           throw new Error(
             data.message ||
               data.error ||
-              'Unable to start registration.'
+              'Registration failed.'
           );
         }
-
-        const registration =
-          data.data || {};
-
-        if (
-          !registration.registrationId
-        ) {
-
-          throw new Error(
-            'The server did not return a registration ID.'
-          );
-        }
-
-        setRegistrationId(
-          registration.registrationId
-        );
-
-        setMaskedDestination(
-          ''
-        );
-
-        setStep(6);
 
         setSuccess(
-          'Your registration details are ready. Choose where you want to receive your verification code.'
-        );
-
-      } catch (requestError) {
-
-        console.error(
-          'Start registration error:',
-          requestError
-        );
-
-        setError(
-          requestError
-            ?.response?.data
-            ?.message ||
-            requestError?.message ||
-            'Unable to start registration.'
-        );
-
-      } finally {
-
-        setLoading(false);
-      }
-    };
-
-
-  // ==========================================================
-  // SEND OTP
-  // ==========================================================
-
-  const sendOtp = async (
-    channel,
-    force = false
-  ) => {
-
-    if (
-      !registrationId
-    ) {
-
-      setError(
-        'Your registration session is missing. Please start signup again.'
-      );
-
-      return;
-    }
-
-    if (
-      !force &&
-      countdown > 0
-    ) {
-
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-    setSuccess('');
-
-    try {
-
-      const response =
-        await apiClient.post(
-          '/auth/register/send-otp',
-          {
-            registrationId,
-            channel,
-          }
-        );
-
-      const data =
-        response?.data || {};
-
-      if (
-        data.success === false
-      ) {
-
-        throw new Error(
-          data.message ||
-            data.error ||
-            'Unable to send verification code.'
-        );
-      }
-
-      setVerificationChannel(
-        channel
-      );
-
-      setMaskedDestination(
-        data.data?.destination ||
-          ''
-      );
-
-      setOtpSent(true);
-
-      setOtp('');
-
-      const seconds =
-        Number(
-          data.data?.expiresAt
-            ? 60
-            : 60
-        );
-
-      setResendAvailableAt(
-        Date.now() +
-          seconds * 1000
-      );
-
-      setSuccess(
-        channel === 'email'
-          ? 'A verification code has been sent to your email.'
-          : 'A verification code has been sent to your phone.'
-      );
-
-    } catch (requestError) {
-
-      console.error(
-        'Send signup OTP error:',
-        requestError
-      );
-
-      setError(
-        requestError
-          ?.response?.data
-          ?.message ||
-          requestError?.message ||
-          'Unable to send verification code.'
-      );
-
-    } finally {
-
-      setLoading(false);
-    }
-  };
-
-
-  // ==========================================================
-  // VERIFY OTP
-  // ==========================================================
-
-  const verifyOtp =
-    async () => {
-
-      if (
-        !registrationId
-      ) {
-
-        setError(
-          'Registration session not found.'
-        );
-
-        return;
-      }
-
-      if (
-        !verificationChannel
-      ) {
-
-        setError(
-          'Please select Email or Phone first.'
-        );
-
-        return;
-      }
-
-      if (
-        !/^\d{6}$/.test(
-          otp.trim()
-        )
-      ) {
-
-        setError(
-          'Enter the 6-digit verification code.'
-        );
-
-        return;
-      }
-
-      setLoading(true);
-      setError('');
-      setSuccess('');
-
-      try {
-
-        const response =
-          await apiClient.post(
-            '/auth/register/verify-otp',
-            {
-              registrationId,
-
-              channel:
-                verificationChannel,
-
-              otp:
-                otp.trim(),
-            }
-          );
-
-        const data =
-          response?.data || {};
-
-        if (
-          data.success === false
-        ) {
-
-          throw new Error(
-            data.message ||
-              data.error ||
-              'Verification failed.'
-          );
-        }
-
-        setVerified(true);
-
-        setOtpSent(false);
-
-        setSuccess(
-          'Your identity has been verified and your account has been created successfully.'
+          'Your account has been created successfully. Redirecting you to login...'
         );
 
         window.setTimeout(
           () => {
-
             navigate(
               '/login',
               {
                 replace: true,
-
                 state: {
                   message:
-                    'Account verified successfully. You can now log in.',
+                    'Account created successfully. You can now log in.',
                 },
               }
             );
-
           },
-          1800
+          1000
         );
 
       } catch (requestError) {
 
         console.error(
-          'Verify signup OTP error:',
+          'Registration error:',
           requestError
         );
 
@@ -701,7 +400,7 @@ const Signup = () => {
             ?.response?.data
             ?.message ||
             requestError?.message ||
-            'Verification failed.'
+            'Registration failed.'
         );
 
       } finally {
@@ -720,17 +419,12 @@ const Signup = () => {
 
       event.preventDefault();
 
-      if (step < 5) {
-
+      if (step < totalSteps) {
         nextStep();
-
         return;
       }
 
-      if (step === 5) {
-
-        await startRegistration();
-      }
+      await startRegistration();
     };
 
 
@@ -860,9 +554,7 @@ const Signup = () => {
                 dark:text-white
               "
             >
-              {step === 6
-                ? 'Verify Your Identity'
-                : 'Create Your Profile'}
+              Create Your Profile
             </h2>
 
 
@@ -1968,66 +1660,50 @@ const Signup = () => {
                   </div>
 
 
-                  <div
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarSelect}
+                    className="hidden"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={openAvatarPicker}
+                    disabled={loading}
                     className="
                       w-full
                       max-w-xs
-                      space-y-2
+                      px-4
+                      py-3
+                      rounded-xl
+                      bg-brand-600
+                      hover:bg-brand-500
+                      text-white
+                      text-sm
+                      font-semibold
+                      transition
+                      flex
+                      items-center
+                      justify-center
+                      gap-2
+                      disabled:opacity-50
                     "
                   >
+                    <Camera className="w-4 h-4" />
+                    Choose Picture
+                  </button>
 
-                    <label
-                      className="
-                        block
-                        text-xs
-                        font-medium
-                        text-slate-700
-                        dark:text-slate-300
-                      "
-                    >
-                      Avatar Image URL
-                    </label>
-
-
-                    <input
-                      type="url"
-                      name="avatarUrl"
-                      value={
-                        formData.avatarUrl
-                      }
-                      onChange={
-                        handleChange
-                      }
-                      placeholder="https://example.com/photo.jpg"
-                      className="
-                        w-full
-                        px-3
-                        py-2
-                        bg-white
-                        dark:bg-dark-bg/80
-                        border
-                        border-slate-300
-                        dark:border-dark-border
-                        rounded-lg
-                        text-xs
-                        text-slate-900
-                        dark:text-white
-                        focus:outline-none
-                        focus:border-brand-500
-                      "
-                    />
-
-
-                    <p
-                      className="
-                        text-[11px]
-                        text-slate-500
-                      "
-                    >
-                      You can add a profile image URL.
-                    </p>
-
-                  </div>
+                  <p
+                    className="
+                      text-[11px]
+                      text-slate-500
+                      dark:text-slate-400
+                    "
+                  >
+                    Click to open your device Gallery and select a profile picture.
+                  </p>
 
                 </div>
 
@@ -2235,515 +1911,10 @@ const Signup = () => {
 
 
             {/* ==================================================
-                STEP 6
-            ================================================== */}
-
-            {step === 6 && (
-              <div
-                className="
-                  space-y-5
-                  animate-fadeIn
-                "
-              >
-
-                {!verified ? (
-
-                  <>
-
-                    <div className="text-center">
-
-                      <p
-                        className="
-                          text-sm
-                          text-slate-600
-                          dark:text-slate-300
-                        "
-                      >
-                        Confirm that you own at least
-                        one of the contact methods
-                        registered with this account.
-                      </p>
-
-                    </div>
-
-
-                    {/* CHANNEL BUTTONS */}
-
-                    <div
-                      className="
-                        grid
-                        grid-cols-1
-                        sm:grid-cols-2
-                        gap-3
-                      "
-                    >
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          sendOtp(
-                            'email'
-                          )
-                        }
-                        disabled={
-                          loading
-                        }
-                        className={`
-                          p-4
-                          rounded-xl
-                          border
-                          text-left
-                          transition
-                          ${
-                            verificationChannel ===
-                            'email'
-                              ? 'border-brand-500 bg-brand-500/10'
-                              : 'border-slate-200 dark:border-slate-700 hover:border-brand-400'
-                          }
-                        `}
-                      >
-
-                        <Mail
-                          className="
-                            w-6
-                            h-6
-                            text-brand-500
-                            mb-3
-                          "
-                        />
-
-                        <p
-                          className="
-                            text-sm
-                            font-bold
-                            text-slate-900
-                            dark:text-white
-                          "
-                        >
-                          Verify by Email
-                        </p>
-
-                        <p
-                          className="
-                            text-[11px]
-                            text-slate-500
-                            dark:text-slate-400
-                            mt-1
-                          "
-                        >
-                          {formData.email}
-                        </p>
-
-                      </button>
-
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          sendOtp(
-                            'phone'
-                          )
-                        }
-                        disabled={
-                          loading
-                        }
-                        className={`
-                          p-4
-                          rounded-xl
-                          border
-                          text-left
-                          transition
-                          ${
-                            verificationChannel ===
-                            'phone'
-                              ? 'border-brand-500 bg-brand-500/10'
-                              : 'border-slate-200 dark:border-slate-700 hover:border-brand-400'
-                          }
-                        `}
-                      >
-
-                        <Smartphone
-                          className="
-                            w-6
-                            h-6
-                            text-brand-500
-                            mb-3
-                          "
-                        />
-
-                        <p
-                          className="
-                            text-sm
-                            font-bold
-                            text-slate-900
-                            dark:text-white
-                          "
-                        >
-                          Verify by Phone
-                        </p>
-
-                        <p
-                          className="
-                            text-[11px]
-                            text-slate-500
-                            dark:text-slate-400
-                            mt-1
-                          "
-                        >
-                          {formData.phone}
-                        </p>
-
-                      </button>
-
-                    </div>
-
-
-                    {otpSent && (
-
-                      <div
-                        className="
-                          p-4
-                          rounded-xl
-                          bg-slate-50
-                          dark:bg-slate-950/60
-                          border
-                          border-slate-200
-                          dark:border-slate-800
-                        "
-                      >
-
-                        <div
-                          className="
-                            flex
-                            items-center
-                            gap-2
-                            mb-3
-                          "
-                        >
-
-                          {verificationChannel ===
-                          'email' ? (
-
-                            <Mail
-                              className="
-                                w-4
-                                h-4
-                                text-brand-500
-                              "
-                            />
-
-                          ) : (
-
-                            <Smartphone
-                              className="
-                                w-4
-                                h-4
-                                text-brand-500
-                              "
-                            />
-
-                          )}
-
-                          <p
-                            className="
-                              text-xs
-                              text-slate-600
-                              dark:text-slate-300
-                            "
-                          >
-                            Code sent to{' '}
-
-                            <strong>
-                              {maskedDestination}
-                            </strong>
-                          </p>
-
-                        </div>
-
-
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          autoComplete="one-time-code"
-                          maxLength={6}
-                          value={otp}
-                          onChange={(event) => {
-
-                            const value =
-                              event.target.value
-                                .replace(
-                                  /\D/g,
-                                  ''
-                                )
-                                .slice(
-                                  0,
-                                  6
-                                );
-
-                            setOtp(
-                              value
-                            );
-
-                            setError('');
-
-                          }}
-                          placeholder="000000"
-                          className="
-                            w-full
-                            text-center
-                            tracking-[0.6em]
-                            text-2xl
-                            font-black
-                            px-4
-                            py-4
-                            bg-white
-                            dark:bg-dark-bg
-                            border
-                            border-slate-300
-                            dark:border-dark-border
-                            rounded-xl
-                            text-slate-900
-                            dark:text-white
-                            focus:outline-none
-                            focus:border-brand-500
-                          "
-                        />
-
-
-                        <button
-                          type="button"
-                          onClick={
-                            verifyOtp
-                          }
-                          disabled={
-                            loading ||
-                            otp.length !==
-                              6
-                          }
-                          className="
-                            w-full
-                            mt-3
-                            px-4
-                            py-3
-                            bg-brand-600
-                            hover:bg-brand-500
-                            text-white
-                            font-bold
-                            text-sm
-                            rounded-xl
-                            transition
-                            disabled:opacity-50
-                          "
-                        >
-
-                          {loading ? (
-
-                            <span
-                              className="
-                                flex
-                                items-center
-                                justify-center
-                                gap-2
-                              "
-                            >
-
-                              <Loader2
-                                className="
-                                  w-4
-                                  h-4
-                                  animate-spin
-                                "
-                              />
-
-                              Verifying...
-
-                            </span>
-
-                          ) : (
-
-                            <span
-                              className="
-                                flex
-                                items-center
-                                justify-center
-                                gap-2
-                              "
-                            >
-
-                              <CheckCircle2
-                                className="
-                                  w-4
-                                  h-4
-                                "
-                              />
-
-                              Verify OTP
-
-                            </span>
-
-                          )}
-
-                        </button>
-
-
-                        <div
-                          className="
-                            flex
-                            items-center
-                            justify-between
-                            gap-3
-                            mt-3
-                          "
-                        >
-
-                          <button
-                            type="button"
-                            disabled={
-                              loading ||
-                              countdown >
-                                0
-                            }
-                            onClick={() =>
-                              sendOtp(
-                                verificationChannel,
-                                true
-                              )
-                            }
-                            className="
-                              text-xs
-                              font-semibold
-                              text-brand-600
-                              dark:text-brand-400
-                              disabled:opacity-50
-                            "
-                          >
-
-                            <span
-                              className="
-                                inline-flex
-                                items-center
-                                gap-1
-                              "
-                            >
-
-                              <RefreshCw
-                                className="w-3 h-3"
-                              />
-
-                              Resend Code
-
-                            </span>
-
-                          </button>
-
-
-                          {countdown >
-                            0 && (
-
-                            <span
-                              className="
-                                text-[11px]
-                                text-slate-500
-                              "
-                            >
-                              Resend in{' '}
-                              {countdown}s
-                            </span>
-
-                          )}
-
-                        </div>
-
-                      </div>
-
-                    )}
-
-                  </>
-
-                ) : (
-
-                  <div
-                    className="
-                      text-center
-                      py-8
-                    "
-                  >
-
-                    <div
-                      className="
-                        w-16
-                        h-16
-                        rounded-full
-                        bg-emerald-500/10
-                        border
-                        border-emerald-500/30
-                        flex
-                        items-center
-                        justify-center
-                        mx-auto
-                        mb-4
-                      "
-                    >
-
-                      <CheckCircle2
-                        className="
-                          w-8
-                          h-8
-                          text-emerald-500
-                        "
-                      />
-
-                    </div>
-
-
-                    <h3
-                      className="
-                        text-xl
-                        font-bold
-                        text-slate-900
-                        dark:text-white
-                      "
-                    >
-                      Account Verified
-                    </h3>
-
-
-                    <p
-                      className="
-                        text-sm
-                        text-slate-500
-                        dark:text-slate-400
-                        mt-2
-                      "
-                    >
-                      Your EAZY DON CHECK account
-                      has been created successfully.
-                    </p>
-
-
-                    <p
-                      className="
-                        text-xs
-                        text-slate-500
-                        mt-4
-                      "
-                    >
-                      Redirecting you to login...
-                    </p>
-
-                  </div>
-
-                )}
-
-              </div>
-            )}
-
-
-            {/* ==================================================
                 NAVIGATION
             ================================================== */}
 
-            {step < 6 && (
+            {step <= totalSteps && (
 
               <div
                 className="
@@ -2803,7 +1974,7 @@ const Signup = () => {
                 )}
 
 
-                {step < 5 ? (
+                {step < totalSteps ? (
 
                   <button
                     type="button"
@@ -2880,7 +2051,7 @@ const Signup = () => {
                           "
                         />
 
-                        Preparing Verification...
+                        Creating Account...
 
                       </>
 
@@ -2888,11 +2059,7 @@ const Signup = () => {
 
                       <>
 
-                        Continue to Verification
-
-                        <KeyRound
-                          className="w-4 h-4"
-                        />
+                        Create Account
 
                       </>
 
