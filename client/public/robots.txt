@@ -17,7 +17,7 @@ Disallow: /subscription
 Disallow: /photo-enhancer
 Disallow: /invoice-history
 
-# Password recovery pages are not useful search results
+# Password recovery pages
 Disallow: /forgot-password
 Disallow: /reset-password
 
