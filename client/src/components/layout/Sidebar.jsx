@@ -41,6 +41,7 @@ import {
   History,
   MoreVertical,
   X,
+  Star,
 } from 'lucide-react';
 
 import ThemeToggle from '../common/ThemeToggle';
@@ -651,6 +652,21 @@ const Sidebar = () => {
           ],
         },
 
+        // ====================================================
+        // FEEDBACK
+        // ====================================================
+
+        {
+          label: 'Feedback',
+          path: '/feedback',
+          icon: Star,
+
+          roles: [
+            'user',
+            'superadmin',
+          ],
+        },
+
       ],
     },
 
@@ -1211,11 +1227,6 @@ const Sidebar = () => {
 
       {/* ====================================================
           SCROLLABLE NAVIGATION
-
-          IMPORTANT:
-          min-h-0 allows this section to shrink properly on
-          mobile instead of pushing the footer outside the
-          viewport.
       ==================================================== */}
 
       <div
@@ -1337,6 +1348,15 @@ const Sidebar = () => {
             ================================================= */}
 
             {renderDirectMessages()}
+
+
+            {/* =================================================
+                FEEDBACK
+            ================================================= */}
+
+            {renderNavItem(
+              navSections[2].items[1]
+            )}
 
 
             {/* =================================================
@@ -1661,13 +1681,6 @@ const Sidebar = () => {
 
       {/* ====================================================
           BOTTOM SECTION / FOOTER
-
-          IMPORTANT MOBILE FIX:
-          This section is shrink-0 and remains outside the
-          scrollable navigation.
-
-          100dvh + min-h-0 on the parent sidebar ensures this
-          footer remains inside the real mobile viewport.
       ==================================================== */}
 
       <div
@@ -2008,12 +2021,6 @@ const Sidebar = () => {
 
       {/* ======================================================
           MOBILE 3-DOT MENU
-
-          Replaced the old hamburger icon with a vertical
-          three-dot menu.
-
-          It disappears while the drawer is open because the
-          drawer has its own X close button.
       ====================================================== */}
 
       {!mobileOpen && (
@@ -2106,14 +2113,6 @@ const Sidebar = () => {
 
       {/* ======================================================
           SIDEBAR
-
-          MOBILE:
-          - Uses 100dvh instead of h-screen.
-          - min-h-0 allows the navigation to shrink.
-          - Footer remains visible inside the viewport.
-
-          DESKTOP:
-          - Existing sticky/collapsible behavior preserved.
       ====================================================== */}
 
       <aside

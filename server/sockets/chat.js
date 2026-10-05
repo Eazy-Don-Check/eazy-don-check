@@ -316,6 +316,20 @@ const normalizeAttachments = (
           typeof attachment.file_size ===
           'number'
             ? attachment.file_size
+            : undefined,
+
+        // Preserve audio metadata so voice notes remain fully
+        // reconstructable when history is loaded after login.
+        mime_type:
+          typeof attachment.mime_type ===
+          'string'
+            ? attachment.mime_type
+            : undefined,
+
+        duration:
+          typeof attachment.duration ===
+          'number'
+            ? attachment.duration
             : undefined
       };
     })
@@ -779,6 +793,29 @@ module.exports =
           {
             userId,
             isOnline: true
+          }
+        );
+
+        // ======================================================
+        // ONLINE USERS SNAPSHOT
+        // ======================================================
+        //
+        // A client may connect after other users are already online.
+        // Give it the authoritative list when requested so it does
+        // not depend on having received their earlier online events.
+        //
+        socket.on(
+          'request_online_users',
+          () => {
+            socket.emit(
+              'online_users_snapshot',
+              {
+                userIds:
+                  Array.from(
+                    onlineUsers.keys()
+                  )
+              }
+            );
           }
         );
 

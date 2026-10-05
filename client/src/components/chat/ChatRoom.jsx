@@ -293,16 +293,15 @@ export default function ChatRoom() {
   const initialConversationAnchorRef =
     useRef(null);
 
-  const initialConversationLoadRef =
-    useRef(null);
-
   /*
-   * Stores the exact conversation boundary that may be marked read
-   * after the initial history has actually been rendered and positioned.
-   * This prevents the history request itself from destroying the user's
-   * last-read position before the DOM has been scrolled to it.
+   * Stores the exact message through which the initial conversation
+   * may be marked read. It is deliberately consumed only after the
+   * anchor has actually been rendered and positioned in the DOM.
    */
   const initialReadThroughRef =
+    useRef(null);
+
+  const initialConversationLoadRef =
     useRef(null);
 
   const typingTimeoutRef =
@@ -315,7 +314,6 @@ export default function ChatRoom() {
   const activeRecipientIdRef = useRef(null);
   const chatModeRef = useRef(chatMode);
   const currentUserIdRef = useRef(null);
-  const messagesRef = useRef([]);
 
   const fileInputRef =
     useRef(null);
@@ -403,10 +401,6 @@ export default function ChatRoom() {
     chatModeRef.current = chatMode;
     currentUserIdRef.current = getId(user);
   }, [activeRoom, activeRecipient, chatMode, user, getId]);
-
-  useEffect(() => {
-    messagesRef.current = Array.isArray(messages) ? messages : [];
-  }, [messages]);
 
 
   const getRoomIsPrivate =
@@ -646,7 +640,7 @@ export default function ChatRoom() {
 
 
   // =========================================================
-  // SCROLL / INITIAL READ POSITION
+  // SCROLL
   // =========================================================
 
   useEffect(() => {
@@ -654,105 +648,87 @@ export default function ChatRoom() {
       return;
     }
 
-    const anchorId =
-      initialConversationAnchorRef.current;
+    const anchorId = initialConversationAnchorRef.current;
+    const readThrough = initialReadThroughRef.current;
 
-    if (!anchorId) {
-      scrollToBottom();
-      return;
-    }
-
-    let cancelled = false;
-    let attempts = 0;
-    const maxAttempts = 12;
-
-    const positionAtInitialBoundary = () => {
-      if (cancelled) {
+    const markInitialConversationRead = () => {
+      if (!readThrough?.roomId || !readThrough?.throughMessageId || !socket) {
         return;
       }
 
-      attempts += 1;
+      initialReadThroughRef.current = null;
+      lastMarkedRoomRef.current = readThrough.roomId;
 
-      const escapedAnchorId =
-        typeof CSS !== 'undefined' &&
-        typeof CSS.escape === 'function'
-          ? CSS.escape(String(anchorId))
-          : String(anchorId).replace(/["\\]/g, '\\$&');
+      socket.emit('mark_messages_read', {
+        roomId: readThrough.roomId,
+        throughMessageId: readThrough.throughMessageId
+      });
 
-      const anchorElement =
-        document.querySelector(
+      Promise.resolve(refreshUnreadCounts()).catch((error) => {
+        console.warn('Unable to refresh initial unread counts:', error);
+      });
+    };
+
+    if (anchorId) {
+      let frame = 0;
+      let cancelled = false;
+
+      const locateAnchor = () => {
+        if (cancelled) return;
+
+        const escapedAnchorId =
+          typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+            ? CSS.escape(String(anchorId))
+            : String(anchorId).replace(/["\\]/g, '\\$&');
+
+        const anchorElement = document.querySelector(
           `[data-message-id="${escapedAnchorId}"]`
         );
 
-      if (anchorElement) {
-        anchorElement.scrollIntoView({
-          behavior: 'auto',
-          block: 'start'
-        });
-
-        initialConversationAnchorRef.current = null;
-
-        /*
-         * Only after the anchor is in the DOM do we advance the read
-         * watermark. This keeps the last-read boundary intact during
-         * history loading and prevents a premature jump to the bottom.
-         */
-        const readBoundary =
-          initialReadThroughRef.current;
-
-        initialReadThroughRef.current = null;
-
-        if (
-          readBoundary?.roomId &&
-          readBoundary?.throughMessageId
-        ) {
-          lastMarkedRoomRef.current =
-            readBoundary.roomId;
-
-          Promise.resolve(
-            markRoomAsReadRef.current(
-              readBoundary.roomId,
-              readBoundary.throughMessageId
-            )
-          ).then(() => {
-            if (!cancelled) {
-              refreshUnreadCounts();
-            }
-          }).catch((error) => {
-            console.warn(
-              'Unable to advance chat read position:',
-              error
-            );
+        if (anchorElement) {
+          anchorElement.scrollIntoView({
+            behavior: 'auto',
+            block: 'start'
           });
+
+          initialConversationAnchorRef.current = null;
+          markInitialConversationRead();
+          return;
         }
 
-        return;
-      }
+        frame += 1;
 
-      if (attempts < maxAttempts) {
-        requestAnimationFrame(positionAtInitialBoundary);
-        return;
-      }
+        // React may need several frames to paint a large/attachment-heavy
+        // conversation. Do not jump to the bottom before the anchor has had
+        // a fair chance to appear, and never mark the conversation read if
+        // the boundary cannot be located.
+        if (frame < 20) {
+          requestAnimationFrame(locateAnchor);
+          return;
+        }
 
-      /*
-       * Do not silently jump to the newest message when a valid anchor is
-       * missing. That was the source of the apparent "starts from the
-       * beginning/bottom" behaviour. Keep the loaded history stable.
-       */
-      initialConversationAnchorRef.current = null;
-      initialReadThroughRef.current = null;
-    };
+        cancelled = true;
+        initialConversationAnchorRef.current = null;
+        initialReadThroughRef.current = null;
+        scrollToBottom();
+      };
 
-    requestAnimationFrame(positionAtInitialBoundary);
+      requestAnimationFrame(locateAnchor);
 
-    return () => {
-      cancelled = true;
-    };
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // No unread boundary: preserve the existing newest-message behavior.
+    scrollToBottom();
   }, [
     messages,
     scrollToBottom,
+    socket,
     refreshUnreadCounts
   ]);
+
 
   // =========================================================
   // CLEAR FILE
@@ -1156,6 +1132,13 @@ export default function ChatRoom() {
         autoGainControl: true
       },
       video: Boolean(withVideo)
+        ? {
+            facingMode: 'user',
+            width: { ideal: 720, max: 1080 },
+            height: { ideal: 1280, max: 1920 },
+            aspectRatio: { ideal: 9 / 16 }
+          }
+        : false
     });
   }, []);
 
@@ -1233,7 +1216,7 @@ export default function ChatRoom() {
       const stream = await requestMediaStream(withVideo);
       localStreamRef.current = stream;
       setCallError('');
-      setCallState({ callId, peerId, peerName: getDisplayName(activeRecipient), direction: 'outgoing', withVideo, status: 'calling', localStream: stream, remoteStream: null, muted: false, cameraOff: false });
+      setCallState({ callId, peerId, peerName: getDisplayName(activeRecipient), direction: 'outgoing', withVideo, status: 'calling', localStream: stream, remoteStream: null, muted: false, cameraOff: false, speakerOn: false });
       startCallRingtone();
       socket.emit('call_user', { targetUserId: peerId, callId, withVideo });
 
@@ -1360,7 +1343,7 @@ export default function ChatRoom() {
         socket.emit('reject_call', { targetUserId: callerId, callId, reason: 'busy' });
         return;
       }
-      setCallState({ callId, peerId: callerId, peerName: callerName || 'Member', direction: 'incoming', withVideo: Boolean(withVideo), status: 'incoming', localStream: null, remoteStream: null, muted: false, cameraOff: false });
+      setCallState({ callId, peerId: callerId, peerName: callerName || 'Member', direction: 'incoming', withVideo: Boolean(withVideo), status: 'incoming', localStream: null, remoteStream: null, muted: false, cameraOff: false, speakerOn: false });
       startCallRingtone();
     };
 
@@ -1369,7 +1352,7 @@ export default function ChatRoom() {
       stopCallRingtone();
       if (callTimeoutRef.current) { clearTimeout(callTimeoutRef.current); callTimeoutRef.current = null; }
       try {
-        const pc = createPeerConnection(peerId, callId, withVideo);
+        const pc = await createPeerConnection(peerId, callId, withVideo);
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         socket.emit('webrtc_offer', { targetUserId: peerId, callId, offer, withVideo });
@@ -1387,7 +1370,7 @@ export default function ChatRoom() {
           localStreamRef.current = await requestMediaStream(withVideo);
           setCallState((previous) => previous ? { ...previous, localStream: localStreamRef.current } : previous);
         }
-        const pc = createPeerConnection(callerId, callId, withVideo);
+        const pc = await createPeerConnection(callerId, callId, withVideo);
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
@@ -1902,7 +1885,7 @@ export default function ChatRoom() {
       const roomId = getId(activeRoom);
 
       if (!roomId) {
-        return { messages: [], anchorId: null };
+        return { messages: [], anchorId: null, readThroughId: null };
       }
 
       const pageSize = 50;
@@ -1934,39 +1917,61 @@ export default function ChatRoom() {
       if (!firstUnreadId || !unreadCount) {
         return {
           messages: latestMessages,
-          anchorId: null
+          anchorId: null,
+          readThroughId: null
         };
       }
 
       const aroundId = lastReadId || firstUnreadId;
-      const aroundResponse = await apiClient.get(
-        `/chat/rooms/${roomId}/messages`,
-        {
-          params: {
-            aroundMessageId: aroundId,
-            page: 1,
-            limit: 100
+      let historyMessages = latestMessages;
+
+      /*
+       * Request an anchored context only as an ADDITION to the normal
+       * latest-history request. The anchored response must never replace
+       * the normal history, because doing so makes older messages disappear.
+       */
+      try {
+        const aroundResponse = await apiClient.get(
+          `/chat/rooms/${roomId}/messages`,
+          {
+            params: {
+              aroundMessageId: aroundId,
+              page: 1,
+              limit: 100
+            }
           }
-        }
-      );
-
-      const aroundResult = aroundResponse?.data || {};
-
-      if (!aroundResult.success) {
-        throw new Error(
-          aroundResult.error ||
-          aroundResult.message ||
-          'Failed to load room messages from the last-read position.'
         );
+
+        const aroundResult = aroundResponse?.data || {};
+        const anchoredMessages = aroundResult.success && Array.isArray(aroundResult.data)
+          ? aroundResult.data
+          : [];
+
+        if (anchoredMessages.length) {
+          const merged = new Map();
+          [...latestMessages, ...anchoredMessages].forEach((message) => {
+            const id = getId(message);
+            if (!id) return;
+            merged.set(id, message);
+          });
+
+          historyMessages = Array.from(merged.values()).sort((a, b) => {
+            const aTime = new Date(a?.createdAt || 0).getTime();
+            const bTime = new Date(b?.createdAt || 0).getTime();
+            if (aTime !== bTime) return aTime - bTime;
+            return String(getId(a) || '').localeCompare(String(getId(b) || ''));
+          });
+        }
+      } catch (error) {
+        console.warn('Unable to load anchored room history; keeping normal history:', error);
       }
 
-      const anchoredMessages = Array.isArray(aroundResult.data)
-        ? aroundResult.data
-        : [];
-
       return {
-        messages: anchoredMessages.length ? anchoredMessages : latestMessages,
-        anchorId: aroundId
+        messages: historyMessages,
+        anchorId: aroundId,
+        readThroughId: historyMessages.length
+          ? getId(historyMessages[historyMessages.length - 1])
+          : null
       };
     };
 
@@ -1974,7 +1979,7 @@ export default function ChatRoom() {
       const recipientId = getId(activeRecipient);
 
       if (!recipientId) {
-        return { messages: [], roomId: null, anchorId: null };
+        return { messages: [], roomId: null, anchorId: null, readThroughId: null };
       }
 
       const stateResponse = await apiClient.get(
@@ -1999,7 +2004,7 @@ export default function ChatRoom() {
         ? stateResult.data
         : [];
 
-      const roomId = latestMessages.reduce(
+      let roomId = latestMessages.reduce(
         (found, message) =>
           found || getId(message?.room) || getId(message?.roomId) || null,
         null
@@ -2010,43 +2015,66 @@ export default function ChatRoom() {
       const unreadCount = Number(readState.unreadCount) || 0;
 
       if (!firstUnreadId || !unreadCount) {
-        return { messages: latestMessages, roomId, anchorId: null };
+        return {
+          messages: latestMessages,
+          roomId,
+          anchorId: null,
+          readThroughId: null
+        };
       }
 
       const aroundId = lastReadId || firstUnreadId;
-      const aroundResponse = await apiClient.get(
-        `/chat/direct/${recipientId}`,
-        {
-          params: {
-            aroundMessageId: aroundId,
-            page: 1,
-            limit: 100
+      let historyMessages = latestMessages;
+
+      try {
+        const aroundResponse = await apiClient.get(
+          `/chat/direct/${recipientId}`,
+          {
+            params: {
+              aroundMessageId: aroundId,
+              page: 1,
+              limit: 100
+            }
           }
-        }
-      );
-
-      const aroundResult = aroundResponse?.data || {};
-
-      if (!aroundResult.success) {
-        throw new Error(
-          aroundResult.error ||
-          aroundResult.message ||
-          'Failed to load direct messages from the last-read position.'
         );
-      }
 
-      const anchoredMessages = Array.isArray(aroundResult.data)
-        ? aroundResult.data
-        : [];
+        const aroundResult = aroundResponse?.data || {};
+        const anchoredMessages = aroundResult.success && Array.isArray(aroundResult.data)
+          ? aroundResult.data
+          : [];
 
-      return {
-        messages: anchoredMessages.length ? anchoredMessages : latestMessages,
-        roomId: roomId || anchoredMessages.reduce(
+        if (anchoredMessages.length) {
+          const merged = new Map();
+          [...latestMessages, ...anchoredMessages].forEach((message) => {
+            const id = getId(message);
+            if (!id) return;
+            merged.set(id, message);
+          });
+
+          historyMessages = Array.from(merged.values()).sort((a, b) => {
+            const aTime = new Date(a?.createdAt || 0).getTime();
+            const bTime = new Date(b?.createdAt || 0).getTime();
+            if (aTime !== bTime) return aTime - bTime;
+            return String(getId(a) || '').localeCompare(String(getId(b) || ''));
+          });
+        }
+
+        roomId = roomId || anchoredMessages.reduce(
           (found, message) =>
             found || getId(message?.room) || getId(message?.roomId) || null,
           null
-        ),
-        anchorId: aroundId
+        );
+      } catch (error) {
+        console.warn('Unable to load anchored direct history; keeping normal history:', error);
+      }
+
+      return {
+        messages: historyMessages,
+        roomId,
+        anchorId: aroundId,
+        readThroughId: historyMessages.length
+          ? getId(historyMessages[historyMessages.length - 1])
+          : null
       };
     };
 
@@ -2061,11 +2089,14 @@ export default function ChatRoom() {
 
           setIsLoadingMessages(true);
           setChatError('');
+          initialConversationAnchorRef.current = null;
+          initialReadThroughRef.current = null;
 
           let response;
           let historyMessages = [];
           let historyRoomId = null;
           let initialAnchorId = null;
+          let initialReadThroughId = null;
 
           if (
             chatMode === 'room' &&
@@ -2086,6 +2117,9 @@ export default function ChatRoom() {
             initialAnchorId =
               roomHistory.anchorId;
 
+            initialReadThroughId =
+              roomHistory.readThroughId;
+
           } else if (
             chatMode === 'direct' &&
             activeRecipient?._id
@@ -2102,6 +2136,9 @@ export default function ChatRoom() {
 
             initialAnchorId =
               directHistory.anchorId;
+
+            initialReadThroughId =
+              directHistory.readThroughId;
           }
 
           if (
@@ -2113,13 +2150,11 @@ export default function ChatRoom() {
           setMessages(historyMessages);
 
           /*
-           * IMPORTANT: do not mark anything read here.
-           *
-           * The REST response is the authoritative source for the user's
-           * last-read boundary. We first render the exact batch around that
-           * boundary, scroll the DOM to it, and only then advance the read
-           * watermark. Otherwise opening a conversation would mark the whole
-           * loaded batch read before the browser has even positioned it.
+           * Do not mark the conversation read here. React has not rendered
+           * the history yet, so doing it here destroys the very read-state
+           * information needed to position the conversation correctly.
+           * The scroll effect consumes this boundary after the anchor is
+           * actually present in the DOM.
            */
           initialConversationAnchorRef.current =
             initialAnchorId;
@@ -2129,17 +2164,11 @@ export default function ChatRoom() {
               ? (historyRoomId || getHistoryRoomId(historyMessages))
               : getId(activeRoom);
 
-          const throughMessage =
-            historyMessages[historyMessages.length - 1];
-
-          const throughMessageId =
-            getId(throughMessage);
-
           initialReadThroughRef.current =
-            readRoomId && throughMessageId && initialAnchorId
+            initialAnchorId && readRoomId && initialReadThroughId
               ? {
                   roomId: readRoomId,
-                  throughMessageId
+                  throughMessageId: initialReadThroughId
                 }
               : null;
 
@@ -2213,11 +2242,6 @@ export default function ChatRoom() {
     const currentUserId =
       getId(user);
 
-    const activeDirectRecipientId =
-      chatMode === 'direct'
-        ? getId(activeRecipient)
-        : null;
-
 
     // -------------------------------------------------------
     // ONLINE STATUS
@@ -2245,6 +2269,28 @@ export default function ChatRoom() {
         );
       };
 
+      const handleOnlineUsersSnapshot = (payload = {}) => {
+  const userIds = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload.userIds)
+      ? payload.userIds
+      : [];
+
+  const nextOnlineMap = {};
+
+  userIds.forEach((userId) => {
+    const normalizedUserId = getId(userId);
+
+    if (normalizedUserId) {
+      nextOnlineMap[normalizedUserId] = true;
+    }
+  });
+
+  setOnlineUserMap((previous) => ({
+    ...previous,
+    ...nextOnlineMap
+  }));
+};
 
     // -------------------------------------------------------
     // ROOM MESSAGE
@@ -2470,24 +2516,10 @@ export default function ChatRoom() {
       const currentRecipientId = getId(activeRecipient);
       const currentUserId = getId(user);
 
-      const activeDirectMessage =
-        chatMode === 'direct'
-          ? messagesRef.current.find((item) =>
-              getId(item?.room) || getId(item?.roomId)
-            )
-          : null;
-
-      const activeDirectRoomIdValue = getId(
-        activeDirectMessage?.room || activeDirectMessage?.roomId
-      );
-
       const belongs = chatMode === 'room'
         ? messageRoomId === currentRoomId
-        : (
-            (activeDirectRoomIdValue && messageRoomId === activeDirectRoomIdValue) ||
-            ((senderId === currentRecipientId && recipientId === currentUserId) ||
-             (senderId === currentUserId && recipientId === currentRecipientId))
-          );
+        : ((senderId === currentRecipientId && recipientId === currentUserId) ||
+           (senderId === currentUserId && recipientId === currentRecipientId));
 
       if (!belongs) return;
       setMessages((previous) => previous.map((item) =>
@@ -2538,14 +2570,11 @@ export default function ChatRoom() {
       handleOnlineStatus
     );
 
-    // Ask the server for the recipient's current authoritative
-    // presence whenever a direct conversation is opened.
-    if (activeDirectRecipientId) {
-      socket.emit('get_user_online_status', {
-        userId: activeDirectRecipientId
-      });
-    }
-
+    socket.on(
+      'online_users_snapshot',
+      handleOnlineUsersSnapshot
+    );
+    
     socket.on(
       'receive_room_message',
       handleReceiveRoomMessage
@@ -2596,6 +2625,11 @@ export default function ChatRoom() {
       socket.off(
         'user_online_status',
         handleOnlineStatus
+      );
+
+      socket.off(
+        'online_users_snapshot',
+        handleOnlineUsersSnapshot
       );
 
       socket.off(
@@ -3619,14 +3653,7 @@ export default function ChatRoom() {
                         : 'Public Channel'
                     )
 
-                  : (
-                      isConnected &&
-                      Boolean(
-                        onlineUserMap[getId(activeRecipient)]
-                      )
-                        ? 'Online'
-                        : 'Offline'
-                    )}
+                  : 'Direct Conversation'}
 
               </p>
 
@@ -3637,44 +3664,31 @@ export default function ChatRoom() {
 
           <div className="flex items-center gap-1 shrink-0">
 
-            {(() => {
-              const recipientIsOnline =
-                chatMode === 'direct'
-                  ? Boolean(
-                      onlineUserMap[getId(activeRecipient)]
-                    )
-                  : true;
+            {isConnected ? (
 
-              const conversationOnline =
-                isConnected &&
-                recipientIsOnline;
+              <>
 
-              return conversationOnline ? (
+                <Wifi className="w-3.5 h-3.5 text-emerald-500" />
 
-                <>
+                <span className="hidden sm:inline text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  Online
+                </span>
 
-                  <Wifi className="w-3.5 h-3.5 text-emerald-500" />
+              </>
 
-                  <span className="hidden sm:inline text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                    {chatMode === 'direct' ? 'Online' : 'Connected'}
-                  </span>
+            ) : (
 
-                </>
+              <>
 
-              ) : (
+                <WifiOff className="w-3.5 h-3.5 text-rose-500" />
 
-                <>
+                <span className="hidden sm:inline text-[10px] font-semibold text-rose-600 dark:text-rose-400">
+                  Offline
+                </span>
 
-                  <WifiOff className="w-3.5 h-3.5 text-rose-500" />
+              </>
 
-                  <span className="hidden sm:inline text-[10px] font-semibold text-rose-600 dark:text-rose-400">
-                    {chatMode === 'direct' ? 'Offline' : 'Offline'}
-                  </span>
-
-                </>
-
-              );
-            })()}
+            )}
 
           </div>
 
@@ -5358,6 +5372,9 @@ export default function ChatRoom() {
             const track = localStreamRef.current?.getVideoTracks?.()[0];
             if (track) track.enabled = !track.enabled;
             setCallState((previous) => previous ? { ...previous, cameraOff: !previous.cameraOff } : previous);
+          }}
+          onToggleSpeaker={(enabled) => {
+            setCallState((previous) => previous ? { ...previous, speakerOn: Boolean(enabled) } : previous);
           }}
           error={callError}
         />

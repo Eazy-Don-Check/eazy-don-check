@@ -1132,6 +1132,13 @@ export default function ChatRoom() {
         autoGainControl: true
       },
       video: Boolean(withVideo)
+        ? {
+            facingMode: 'user',
+            width: { ideal: 720, max: 1080 },
+            height: { ideal: 1280, max: 1920 },
+            aspectRatio: { ideal: 9 / 16 }
+          }
+        : false
     });
   }, []);
 
@@ -1209,7 +1216,7 @@ export default function ChatRoom() {
       const stream = await requestMediaStream(withVideo);
       localStreamRef.current = stream;
       setCallError('');
-      setCallState({ callId, peerId, peerName: getDisplayName(activeRecipient), direction: 'outgoing', withVideo, status: 'calling', localStream: stream, remoteStream: null, muted: false, cameraOff: false });
+      setCallState({ callId, peerId, peerName: getDisplayName(activeRecipient), direction: 'outgoing', withVideo, status: 'calling', localStream: stream, remoteStream: null, muted: false, cameraOff: false, speakerOn: false });
       startCallRingtone();
       socket.emit('call_user', { targetUserId: peerId, callId, withVideo });
 
@@ -1336,7 +1343,7 @@ export default function ChatRoom() {
         socket.emit('reject_call', { targetUserId: callerId, callId, reason: 'busy' });
         return;
       }
-      setCallState({ callId, peerId: callerId, peerName: callerName || 'Member', direction: 'incoming', withVideo: Boolean(withVideo), status: 'incoming', localStream: null, remoteStream: null, muted: false, cameraOff: false });
+      setCallState({ callId, peerId: callerId, peerName: callerName || 'Member', direction: 'incoming', withVideo: Boolean(withVideo), status: 'incoming', localStream: null, remoteStream: null, muted: false, cameraOff: false, speakerOn: false });
       startCallRingtone();
     };
 
@@ -2262,6 +2269,28 @@ export default function ChatRoom() {
         );
       };
 
+      const handleOnlineUsersSnapshot = (payload = {}) => {
+  const userIds = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload.userIds)
+      ? payload.userIds
+      : [];
+
+  const nextOnlineMap = {};
+
+  userIds.forEach((userId) => {
+    const normalizedUserId = getId(userId);
+
+    if (normalizedUserId) {
+      nextOnlineMap[normalizedUserId] = true;
+    }
+  });
+
+  setOnlineUserMap((previous) => ({
+    ...previous,
+    ...nextOnlineMap
+  }));
+};
 
     // -------------------------------------------------------
     // ROOM MESSAGE
@@ -2542,6 +2571,11 @@ export default function ChatRoom() {
     );
 
     socket.on(
+      'online_users_snapshot',
+      handleOnlineUsersSnapshot
+    );
+    
+    socket.on(
       'receive_room_message',
       handleReceiveRoomMessage
     );
@@ -2591,6 +2625,11 @@ export default function ChatRoom() {
       socket.off(
         'user_online_status',
         handleOnlineStatus
+      );
+
+      socket.off(
+        'online_users_snapshot',
+        handleOnlineUsersSnapshot
       );
 
       socket.off(
@@ -5333,6 +5372,9 @@ export default function ChatRoom() {
             const track = localStreamRef.current?.getVideoTracks?.()[0];
             if (track) track.enabled = !track.enabled;
             setCallState((previous) => previous ? { ...previous, cameraOff: !previous.cameraOff } : previous);
+          }}
+          onToggleSpeaker={(enabled) => {
+            setCallState((previous) => previous ? { ...previous, speakerOn: Boolean(enabled) } : previous);
           }}
           error={callError}
         />

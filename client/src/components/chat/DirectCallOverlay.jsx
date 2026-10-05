@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Mic, MicOff, PhoneOff, Video, VideoOff, Phone, X } from 'lucide-react';
+import { Mic, MicOff, PhoneOff, Video, VideoOff, Phone, X, Volume2, VolumeX } from 'lucide-react';
 
 export default function DirectCallOverlay({
   callState,
@@ -8,11 +8,41 @@ export default function DirectCallOverlay({
   onEnd,
   onToggleMute,
   onToggleCamera,
+  onToggleSpeaker,
   error
 }) {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const remoteAudioRef = useRef(null);
+  const [speakerOn, setSpeakerOn] = React.useState(Boolean(callState?.speakerOn));
+
+  useEffect(() => {
+    setSpeakerOn(Boolean(callState?.speakerOn));
+  }, [callState?.speakerOn]);
+
+  const applySpeakerMode = async (enabled) => {
+    const outputElement = remoteAudioRef.current || remoteVideoRef.current;
+    const next = Boolean(enabled);
+
+    try {
+      if (outputElement && typeof outputElement.setSinkId === 'function') {
+        // Browsers that support setSinkId can route the media element
+        // to the default output device. Mobile Safari may not support this.
+        await outputElement.setSinkId('default');
+      }
+
+      if (outputElement) {
+        outputElement.volume = next ? 1 : 0.65;
+      }
+
+      setSpeakerOn(next);
+      onToggleSpeaker?.(next);
+    } catch (speakerError) {
+      console.warn('[Call] Speaker output selection is not supported by this browser:', speakerError);
+      setSpeakerOn(false);
+      onToggleSpeaker?.(false);
+    }
+  };
 
   useEffect(() => {
     if (localVideoRef.current && callState?.localStream) {
@@ -65,18 +95,25 @@ export default function DirectCallOverlay({
   return (
     <div className="fixed inset-0 z-[200] bg-slate-950 flex items-center justify-center overflow-hidden">
       {video ? (
-        <div className="relative w-full h-full bg-black overflow-hidden">
+        <div className="relative w-full h-full bg-black overflow-hidden flex items-center justify-center">
+          <audio
+            ref={remoteAudioRef}
+            autoPlay
+            playsInline
+            controls={false}
+            className="hidden"
+          />
           <video
             ref={remoteVideoRef}
             autoPlay
             playsInline
-            className="absolute inset-0 w-full h-full object-cover"
+            className="w-full h-full max-h-full object-cover aspect-[9/16] sm:aspect-video"
           />
 
           <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-black/60 pointer-events-none" />
 
           {callState.localStream && (
-            <div className="absolute right-3 top-3 sm:right-5 sm:top-5 w-28 sm:w-40 md:w-52 aspect-video rounded-xl sm:rounded-2xl overflow-hidden border border-white/30 bg-black shadow-2xl z-10">
+            <div className="absolute right-3 top-3 sm:right-5 sm:top-5 w-24 sm:w-40 md:w-52 aspect-[9/16] sm:aspect-video rounded-xl sm:rounded-2xl overflow-hidden border border-white/30 bg-black shadow-2xl z-10">
               <video
                 ref={localVideoRef}
                 autoPlay
@@ -165,6 +202,15 @@ export default function DirectCallOverlay({
               )}
               <button
                 type="button"
+                onClick={() => applySpeakerMode(!speakerOn)}
+                className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-black/55 hover:bg-black/70 text-white flex items-center justify-center transition border border-white/10"
+                title={speakerOn ? 'Use earpiece/default audio' : 'Use loudspeaker'}
+                aria-label={speakerOn ? 'Use earpiece/default audio' : 'Use loudspeaker'}
+              >
+                {speakerOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+              </button>
+              <button
+                type="button"
                 onClick={onToggleMute}
                 className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-black/55 hover:bg-black/70 text-white flex items-center justify-center transition border border-white/10"
                 title={callState.muted ? 'Unmute' : 'Mute'}
@@ -240,6 +286,15 @@ export default function DirectCallOverlay({
             </div>
           ) : (
             <div className="absolute left-0 right-0 bottom-8 flex items-center justify-center gap-4">
+              <button
+                type="button"
+                onClick={() => applySpeakerMode(!speakerOn)}
+                className="w-14 h-14 rounded-full bg-slate-800 text-white flex items-center justify-center transition"
+                title={speakerOn ? 'Use earpiece/default audio' : 'Use loudspeaker'}
+                aria-label={speakerOn ? 'Use earpiece/default audio' : 'Use loudspeaker'}
+              >
+                {speakerOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+              </button>
               <button type="button" onClick={onToggleMute} className="w-14 h-14 rounded-full bg-slate-800 text-white flex items-center justify-center" title={callState.muted ? 'Unmute' : 'Mute'}>
                 {callState.muted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
               </button>

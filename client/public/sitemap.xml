@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<urlset
+  xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+>
+
+  <!-- =====================================================
+       MAIN WEBSITE
+  ====================================================== -->
+
+  <url>
+    <loc>https://eazy-don-check.vercel.app/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+
+  <!-- =====================================================
+       PUBLIC PRODUCT / SERVICE PAGE
+  ====================================================== -->
+
+  <url>
+    <loc>https://eazy-don-check.vercel.app/invoice-generator</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+
+  <!-- =====================================================
+       PUBLIC INFORMATION
+  ====================================================== -->
+
+  <url>
+    <loc>https://eazy-don-check.vercel.app/security</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <url>
+    <loc>https://eazy-don-check.vercel.app/privacy-policy</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+
+  <url>
+    <loc>https://eazy-don-check.vercel.app/terms-of-service</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+
+</urlset>

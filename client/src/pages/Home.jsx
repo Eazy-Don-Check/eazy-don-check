@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ChevronRight,
   FileCheck2,
+  FilePlus2,
   Heart,
   MessageCircle,
   Music,
@@ -30,6 +31,49 @@ import { useAuth } from '../context/AuthContext';
 // ============================================================
 
 const LOGO_SRC = '/eazy-don-check-logo.png';
+
+
+// ============================================================
+// SEO STRUCTURED DATA
+// ============================================================
+//
+// This helps search engines understand what EAZY DON CHECK is,
+// what it does, and the main capabilities offered by the platform.
+//
+// ============================================================
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'WebApplication',
+  name: 'EAZY DON CHECK',
+  alternateName:
+    'EAZY DON CHECK - AI Receipt and Invoice Verification',
+  url: 'https://eazy-don-check.vercel.app/',
+  logo: 'https://eazy-don-check.vercel.app/eazy-don-check-logo.png',
+  description:
+    'EAZY DON CHECK is an AI-powered digital platform for receipt and invoice verification, invoice generation, photo enhancement, social networking and online community conversations.',
+  applicationCategory: 'BusinessApplication',
+  operatingSystem: 'Web',
+  browserRequirements:
+    'Requires a modern web browser with JavaScript enabled.',
+  offers: {
+    '@type': 'Offer',
+    price: '0',
+    priceCurrency: 'NGN',
+    description: 'Free account registration is available.',
+  },
+  featureList: [
+    'AI-powered receipt verification',
+    'Invoice verification',
+    'Invoice generation',
+    'Receipt information extraction',
+    'Photo enhancement',
+    'Community chat rooms',
+    'Direct messaging',
+    'User profiles and connections',
+    'Secure account authentication',
+  ],
+};
 
 
 // ============================================================
@@ -123,9 +167,15 @@ const features = [
   },
   {
     icon: FileCheck2,
-    title: 'Receipt Verification',
+    title: 'AI Receipt & Invoice Verification',
     description:
-      'Use EAZY DON CHECK to extract and verify important information from receipts.',
+      'Use EAZY DON CHECK to extract, analyze and verify important information from receipts and invoices.',
+  },
+  {
+    icon: FilePlus2,
+    title: 'Invoice Generation',
+    description:
+      'Create professional digital invoices quickly and conveniently for your business, customers and transactions.',
   },
   {
     icon: ShieldCheck,
@@ -161,6 +211,18 @@ function Home() {
           z-10
         "
       >
+
+        {/* ======================================================
+            SEO STRUCTURED DATA
+        ====================================================== */}
+
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData),
+          }}
+        />
+
 
         <Navbar />
 
@@ -298,7 +360,7 @@ function Home() {
 
                       <img
                         src={LOGO_SRC}
-                        alt="EAZY DON CHECK"
+                        alt="EAZY DON CHECK logo"
                         className="
                           block
                           h-full
@@ -321,13 +383,13 @@ function Home() {
                     <span className="h-1 w-1 shrink-0 rounded-full bg-current" />
 
                     <span className="font-medium">
-                      Smart Verification & Social Community Platform
+                      AI Verification, Invoice Generation & Social Community
                     </span>
 
                   </div>
 
 
-                  {/* HEADING */}
+                  {/* SEO PRIMARY HEADING */}
 
                   <h1
                     className="
@@ -343,7 +405,7 @@ function Home() {
                     "
                   >
 
-                    Connect, Chat &
+                    AI Receipt & Invoice Verification
 
                     <span
                       className="
@@ -359,7 +421,7 @@ function Home() {
                         dark:text-brand-400
                       "
                     >
-                      Verify with EAZY DON CHECK
+                      Plus Invoice Generation & Community
                     </span>
 
                   </h1>
@@ -377,10 +439,12 @@ function Home() {
                       dark:text-slate-300
                     "
                   >
-                    A smart digital platform where you can connect with
-                    people and loved ones, join community conversations,
-                    build relationships and use intelligent receipt
-                    verification tools in one secure place.
+                    EAZY DON CHECK is an AI-powered digital platform for
+                    receipt and invoice verification, invoice generation,
+                    photo enhancement and secure online community
+                    interaction. Extract and analyze receipt information,
+                    create invoices and connect with people in one
+                    convenient platform.
                   </p>
 
 
@@ -614,7 +678,7 @@ function Home() {
 
                             <img
                               src={LOGO_SRC}
-                              alt="EAZY DON CHECK"
+                              alt="EAZY DON CHECK logo"
                               className="
                                 block
                                 h-full
@@ -636,7 +700,7 @@ function Home() {
                             </p>
 
                             <p className="mt-0.5 text-[11px] text-slate-400">
-                              Smart digital workspace
+                              AI verification & invoice workspace
                             </p>
 
                           </div>
@@ -706,11 +770,12 @@ function Home() {
                           <div>
 
                             <p className="text-sm font-semibold tracking-[-0.01em]">
-                              AI Receipt Verification
+                              AI Receipt & Invoice Verification
                             </p>
 
                             <p className="mt-0.5 text-[11px] leading-5 text-slate-400">
-                              Extract, analyze and verify receipt information
+                              Extract, analyze and verify receipt and
+                              invoice information
                             </p>
 
                           </div>
@@ -756,7 +821,7 @@ function Home() {
                           >
 
                             <span className="text-xs text-slate-300">
-                              Social access
+                              Invoice verification
                             </span>
 
                             <CheckCircle2
@@ -799,28 +864,6 @@ function Home() {
 
                         <div className="rounded-xl bg-white/5 p-3.5">
 
-                          <MessageCircle
-                            className="
-                              mb-2
-                              h-[18px]
-                              w-[18px]
-                              text-brand-400
-                            "
-                          />
-
-                          <p className="text-xs font-semibold">
-                            Social
-                          </p>
-
-                          <p className="mt-1 text-[11px] text-slate-400">
-                            Chat & connect
-                          </p>
-
-                        </div>
-
-
-                        <div className="rounded-xl bg-white/5 p-3.5">
-
                           <FileCheck2
                             className="
                               mb-2
@@ -835,7 +878,29 @@ function Home() {
                           </p>
 
                           <p className="mt-1 text-[11px] text-slate-400">
-                            Smart receipt tools
+                            AI receipt & invoice tools
+                          </p>
+
+                        </div>
+
+
+                        <div className="rounded-xl bg-white/5 p-3.5">
+
+                          <FilePlus2
+                            className="
+                              mb-2
+                              h-[18px]
+                              w-[18px]
+                              text-brand-400
+                            "
+                          />
+
+                          <p className="text-xs font-semibold">
+                            Invoicing
+                          </p>
+
+                          <p className="mt-1 text-[11px] text-slate-400">
+                            Generate digital invoices
                           </p>
 
                         </div>
@@ -904,7 +969,7 @@ function Home() {
                     tracking-[-0.035em]
                   "
                 >
-                  More than Just Receipt Verification
+                  AI Verification, Invoice Generation & More
                 </h2>
 
 
@@ -917,8 +982,10 @@ function Home() {
                     dark:text-slate-400
                   "
                 >
-                  EAZY DON CHECK combines smart verification tools
-                  with useful social and community features.
+                  EAZY DON CHECK combines AI-powered receipt and invoice
+                  verification, invoice generation, photo enhancement,
+                  social networking and useful community features in one
+                  secure digital platform.
                 </p>
 
               </div>
@@ -930,7 +997,7 @@ function Home() {
                   grid
                   gap-5
                   md:grid-cols-2
-                  lg:grid-cols-4
+                  lg:grid-cols-5
                 "
               >
 
@@ -1097,6 +1164,8 @@ function Home() {
                   >
                     Join a room that matches your interests and
                     start connecting with other EAZY DON CHECK members.
+                    Talk about technology, business, music, relationships,
+                    entertainment, education and more.
                   </p>
 
                 </div>
@@ -1798,7 +1867,7 @@ function Home() {
 
                     <img
                       src={LOGO_SRC}
-                      alt="EAZY DON CHECK"
+                      alt="EAZY DON CHECK logo"
                       className="
                         block
                         h-full
@@ -1837,8 +1906,10 @@ function Home() {
                       text-slate-300
                     "
                   >
-                    Create your account and start connecting,
-                    chatting and using smart receipt verification tools.
+                    Create your account and start using AI-powered
+                    receipt and invoice verification, generating
+                    professional invoices, connecting with people
+                    and participating in the EAZY DON CHECK community.
                   </p>
 
 

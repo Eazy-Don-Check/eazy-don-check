@@ -1,0 +1,25 @@
+User-agent: *
+Allow: /
+
+# Private/authenticated application areas
+Disallow: /dashboard
+Disallow: /feed
+Disallow: /verify
+Disallow: /messages
+Disallow: /chat
+Disallow: /admin
+Disallow: /settings
+Disallow: /profile
+Disallow: /people
+Disallow: /friends
+Disallow: /notifications
+Disallow: /subscription
+Disallow: /photo-enhancer
+Disallow: /invoice-history
+
+# Password recovery pages are not useful search results
+Disallow: /forgot-password
+Disallow: /reset-password
+
+# Sitemap
+Sitemap: https://eazy-don-check.vercel.app/sitemap.xml
