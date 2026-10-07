@@ -139,6 +139,52 @@ const loadImageForPdf = async (src) => {
   }
 };
 
+const INVOICE_GENERATOR_SEO_DATA = {
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  name: "EAZY DON CHECK Invoice Generator",
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Web",
+  url: "https://eazy-don-check.vercel.app/invoice-generator",
+  description:
+    "Create professional invoices online with EAZY DON CHECK. Add business and customer details, calculate totals, choose invoice templates, preview invoices and download them as PDF.",
+  featureList: [
+    "Online invoice generator",
+    "Professional invoice templates",
+    "Automatic invoice calculations",
+    "Business and customer details",
+    "Invoice preview",
+    "PDF invoice download",
+    "NGN, USD, GBP, EUR, GHS and KES currencies",
+  ],
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "NGN",
+    description:
+      "Invoice generation is available online with EAZY DON CHECK.",
+  },
+};
+
+const INVOICE_GENERATOR_BREADCRUMB_DATA = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    {
+      "@type": "ListItem",
+      position: 1,
+      name: "EAZY DON CHECK",
+      item: "https://eazy-don-check.vercel.app/",
+    },
+    {
+      "@type": "ListItem",
+      position: 2,
+      name: "Invoice Generator",
+      item: "https://eazy-don-check.vercel.app/invoice-generator",
+    },
+  ],
+};
+
 const CURRENCIES = [
   { value: "NGN", label: "₦ Nigerian Naira" },
   { value: "USD", label: "$ US Dollar" },
@@ -333,6 +379,162 @@ const InvoiceGenerator = ({
 
   const [loading, setLoading] =
     useState(isEditing);
+  useEffect(() => {
+    const previousTitle = document.title;
+    const description =
+      "Create professional invoices online with EAZY DON CHECK. Add business and customer details, calculate totals automatically, choose a template, preview your invoice and download a PDF.";
+    const title =
+      "Free Online Invoice Generator | Professional Invoices | EAZY DON CHECK";
+    const canonicalUrl =
+      "https://eazy-don-check.vercel.app/invoice-generator";
+
+    document.title = title;
+
+    const upsertMeta = (
+      selector,
+      attributes,
+      content
+    ) => {
+      let element =
+        document.head.querySelector(
+          selector
+        );
+
+      if (!element) {
+        element =
+          document.createElement(
+            "meta"
+          );
+
+        Object.entries(
+          attributes
+        ).forEach(
+          ([key, value]) => {
+            element.setAttribute(
+              key,
+              value
+            );
+          }
+        );
+
+        document.head.appendChild(
+          element
+        );
+      }
+
+      element.setAttribute(
+        "content",
+        content
+      );
+    };
+
+    upsertMeta(
+      'meta[name="description"]',
+      { name: "description" },
+      description
+    );
+
+    upsertMeta(
+      'meta[name="robots"]',
+      { name: "robots" },
+      "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"
+    );
+
+    upsertMeta(
+      'meta[property="og:title"]',
+      { property: "og:title" },
+      title
+    );
+
+    upsertMeta(
+      'meta[property="og:description"]',
+      {
+        property:
+          "og:description",
+      },
+      description
+    );
+
+    upsertMeta(
+      'meta[property="og:url"]',
+      { property: "og:url" },
+      canonicalUrl
+    );
+
+    upsertMeta(
+      'meta[property="og:type"]',
+      { property: "og:type" },
+      "website"
+    );
+
+    upsertMeta(
+      'meta[property="og:image"]',
+      { property: "og:image" },
+      "https://eazy-don-check.vercel.app/eazy-don-check-logo.png"
+    );
+
+    upsertMeta(
+      'meta[name="twitter:card"]',
+      { name: "twitter:card" },
+      "summary_large_image"
+    );
+
+    upsertMeta(
+      'meta[name="twitter:title"]',
+      {
+        name: "twitter:title",
+      },
+      title
+    );
+
+    upsertMeta(
+      'meta[name="twitter:description"]',
+      {
+        name: "twitter:description",
+      },
+      description
+    );
+
+    upsertMeta(
+      'meta[name="twitter:image"]',
+      {
+        name: "twitter:image",
+      },
+      "https://eazy-don-check.vercel.app/eazy-don-check-logo.png"
+    );
+
+    let canonical =
+      document.head.querySelector(
+        'link[rel="canonical"]'
+      );
+
+    if (!canonical) {
+      canonical =
+        document.createElement(
+          "link"
+        );
+
+      canonical.setAttribute(
+        "rel",
+        "canonical"
+      );
+
+      document.head.appendChild(
+        canonical
+      );
+    }
+
+    canonical.setAttribute(
+      "href",
+      canonicalUrl
+    );
+
+    return () => {
+      document.title =
+        previousTitle;
+    };
+  }, []);
+
 
   const [saving, setSaving] =
     useState(false);
@@ -2457,12 +2659,12 @@ const InvoiceGenerator = ({
                   <ReceiptText className="h-7 w-7 text-brand-600" />
 
                   <h1 className="text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">
-                    Invoice Generator
+                    Online Invoice Generator
                   </h1>
                 </div>
 
                 <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                  Create professional invoices for your customers with automatic calculations.
+                  Create professional invoices online with automatic calculations, customizable templates, business details, customer details and PDF download.
                 </p>
               </div>
             </div>
@@ -3561,6 +3763,146 @@ const InvoiceGenerator = ({
           </div>
         </div>
       </div>
+
+
+      {/* SEO CONTENT */}
+      <section className="mx-auto mt-10 max-w-6xl overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-dark-border dark:bg-dark-card">
+        <div className="border-b border-gray-200 bg-gray-50/80 px-6 py-6 dark:border-dark-border dark:bg-dark-bg/40 sm:px-8">
+          <div className="flex items-start gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 ring-1 ring-brand-100 dark:bg-brand-950/30 dark:text-brand-400 dark:ring-brand-900/40">
+              <FileText className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-600 dark:text-brand-400">
+                Invoice resources
+              </p>
+              <h2 className="mt-1 text-xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-2xl">
+                Create professional invoices online
+              </h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600 dark:text-gray-300">
+                Everything you need to prepare a clean, business-ready invoice, calculate totals accurately and deliver a professional PDF to your customer.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-8 p-6 sm:p-8">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-dark-border dark:bg-dark-bg">
+              <p className="text-sm font-bold text-gray-900 dark:text-white">Professional presentation</p>
+              <p className="mt-1.5 text-sm leading-6 text-gray-600 dark:text-gray-400">Use your business details, logo, customer information and a polished invoice template.</p>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-dark-border dark:bg-dark-bg">
+              <p className="text-sm font-bold text-gray-900 dark:text-white">Accurate calculations</p>
+              <p className="mt-1.5 text-sm leading-6 text-gray-600 dark:text-gray-400">Add items, discounts, service charges, tax and payments while totals are calculated for you.</p>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-dark-border dark:bg-dark-bg">
+              <p className="text-sm font-bold text-gray-900 dark:text-white">Ready to share</p>
+              <p className="mt-1.5 text-sm leading-6 text-gray-600 dark:text-gray-400">Preview your invoice and download the finished document as a professional PDF.</p>
+            </div>
+          </div>
+
+          <div className="grid gap-8 lg:grid-cols-2">
+            <div>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">What can you create with the invoice generator?</h3>
+              <p className="mt-2 text-sm leading-7 text-gray-600 dark:text-gray-400">
+                Create clean, customizable invoices with your business logo, customer information, invoice dates, payment terms, itemized products or services, discounts, service charges, applicable tax rates, notes and terms and conditions. Choose a template and review the invoice before downloading it.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">How to create an invoice online</h3>
+              <ol className="mt-3 space-y-2.5 text-sm leading-6 text-gray-600 dark:text-gray-400">
+                <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-bold text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">1</span><span>Enter your business and customer information.</span></li>
+                <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-bold text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">2</span><span>Add the products or services being billed.</span></li>
+                <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-bold text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">3</span><span>Enter any applicable discount, service charge or tax rate.</span></li>
+                <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-bold text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">4</span><span>Choose a template and review the live preview.</span></li>
+                <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-bold text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">5</span><span>Save the invoice or download the finished PDF.</span></li>
+              </ol>
+            </div>
+          </div>
+
+          <div className="grid gap-8 border-t border-gray-200 pt-8 dark:border-dark-border lg:grid-cols-2">
+            <div>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">Invoice generator for Nigerian businesses</h3>
+              <p className="mt-2 text-sm leading-7 text-gray-600 dark:text-gray-400">
+                Nigerian businesses, freelancers, consultants, designers, service providers and other professionals can prepare digital invoices in Nigerian Naira (NGN) and other supported currencies. The tax field is flexible, so you can enter the applicable rate for your transaction instead of relying on a fixed tax assumption.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">Who can use an online invoice generator?</h3>
+              <p className="mt-2 text-sm leading-7 text-gray-600 dark:text-gray-400">
+                An online invoice generator is useful for small businesses, freelancers, contractors, agencies, retailers, consultants and service providers who need a convenient way to prepare professional invoices and keep billing information organized.
+              </p>
+            </div>
+          </div>
+
+          {/* SPECIAL FAQ */}
+          <div className="overflow-hidden rounded-2xl border border-brand-100 bg-gradient-to-b from-brand-50/70 to-white dark:border-brand-900/40 dark:from-brand-950/30 dark:to-dark-bg">
+            <div className="flex items-center gap-3 border-b border-brand-100 px-5 py-5 dark:border-brand-900/40 sm:px-6">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white shadow-sm">
+                <ChevronDown className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-600 dark:text-brand-400">Need to know?</p>
+                <h3 className="mt-0.5 text-lg font-bold text-gray-900 dark:text-white">Frequently Asked Questions</h3>
+              </div>
+            </div>
+
+            <div className="divide-y divide-brand-100 dark:divide-brand-900/30">
+              <details className="group px-5 py-1 sm:px-6" open>
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-sm font-semibold text-gray-900 outline-none dark:text-white">
+                  <span>Can I download my invoice as a PDF?</span>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-brand-600 transition-transform group-open:rotate-180 dark:text-brand-400" />
+                </summary>
+                <p className="pb-4 pr-8 text-sm leading-6 text-gray-600 dark:text-gray-400">Yes. After preparing and reviewing your invoice, EAZY DON CHECK can generate and download a PDF version.</p>
+              </details>
+
+              <details className="group px-5 py-1 sm:px-6">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-sm font-semibold text-gray-900 outline-none dark:text-white">
+                  <span>Can I add my business logo?</span>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-brand-600 transition-transform group-open:rotate-180 dark:text-brand-400" />
+                </summary>
+                <p className="pb-4 pr-8 text-sm leading-6 text-gray-600 dark:text-gray-400">Yes. You can upload a business logo and display it on your invoice for a more professional presentation.</p>
+              </details>
+
+              <details className="group px-5 py-1 sm:px-6">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-sm font-semibold text-gray-900 outline-none dark:text-white">
+                  <span>Which currencies are supported?</span>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-brand-600 transition-transform group-open:rotate-180 dark:text-brand-400" />
+                </summary>
+                <p className="pb-4 pr-8 text-sm leading-6 text-gray-600 dark:text-gray-400">EAZY DON CHECK currently supports NGN, USD, GBP, EUR, GHS and KES for invoice creation.</p>
+              </details>
+
+              <details className="group px-5 py-1 sm:px-6">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-sm font-semibold text-gray-900 outline-none dark:text-white">
+                  <span>Can I save and edit an invoice?</span>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-brand-600 transition-transform group-open:rotate-180 dark:text-brand-400" />
+                </summary>
+                <p className="pb-4 pr-8 text-sm leading-6 text-gray-600 dark:text-gray-400">Yes. Logged-in users can save invoices and return to edit existing invoice records.</p>
+              </details>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(
+            INVOICE_GENERATOR_SEO_DATA
+          ),
+        }}
+      />
+
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(
+            INVOICE_GENERATOR_BREADCRUMB_DATA
+          ),
+        }}
+      />
 
       {/* PREVIEW MODAL */}
 
