@@ -1,3 +1,4 @@
+
 import React, {
   useEffect,
   useMemo,
@@ -724,6 +725,70 @@ export default function Navbar() {
                   </Link>
                 );
               })}
+
+              {/* ABOUT */}
+
+              <Link
+                to="/about"
+                className={[
+                  `
+                    px-4
+                    py-2
+                    rounded-xl
+                    text-sm
+                    font-medium
+                    transition-colors
+                  `,
+                  isActive('/about')
+                    ? `
+                      bg-brand-500/10
+                      text-brand-600
+                      dark:text-brand-400
+                    `
+                    : `
+                      text-gray-600
+                      dark:text-gray-300
+                      hover:bg-gray-100
+                      dark:hover:bg-gray-800
+                      hover:text-gray-900
+                      dark:hover:text-white
+                    `,
+                ].join(' ')}
+              >
+                About
+              </Link>
+
+              {/* CREATE INVOICE */}
+
+              <Link
+                to="/invoice-generator"
+                className={[
+                  `
+                    px-4
+                    py-2
+                    rounded-xl
+                    text-sm
+                    font-medium
+                    transition-colors
+                  `,
+                  isActive('/invoice-generator')
+                    ? `
+                      bg-brand-500/10
+                      text-brand-600
+                      dark:text-brand-400
+                    `
+                    : `
+                      text-gray-600
+                      dark:text-gray-300
+                      hover:bg-gray-100
+                      dark:hover:bg-gray-800
+                      hover:text-gray-900
+                      dark:hover:text-white
+                    `,
+                ].join(' ')}
+              >
+                Create Invoice
+              </Link>
 
               {/* SUPER ADMIN */}
 
@@ -1519,6 +1584,80 @@ export default function Navbar() {
                     </Link>
                   );
                 })}
+
+                {/* ABOUT */}
+
+                <Link
+                  to="/about"
+                  onClick={() =>
+                    setMobileOpen(false)
+                  }
+                  className={[
+                    `
+                      flex
+                      items-center
+                      gap-3
+                      px-4
+                      py-3
+                      rounded-xl
+                      text-sm
+                      font-medium
+                      transition-colors
+                      touch-manipulation
+                    `,
+                    isActive('/about')
+                      ? `
+                        bg-brand-500/10
+                        text-brand-600
+                        dark:text-brand-400
+                      `
+                      : `
+                        text-gray-700
+                        dark:text-gray-200
+                        hover:bg-gray-100
+                        dark:hover:bg-gray-800
+                      `,
+                  ].join(' ')}
+                >
+                  About
+                </Link>
+
+                {/* CREATE INVOICE */}
+
+                <Link
+                  to="/invoice-generator"
+                  onClick={() =>
+                    setMobileOpen(false)
+                  }
+                  className={[
+                    `
+                      flex
+                      items-center
+                      gap-3
+                      px-4
+                      py-3
+                      rounded-xl
+                      text-sm
+                      font-medium
+                      transition-colors
+                      touch-manipulation
+                    `,
+                    isActive('/invoice-generator')
+                      ? `
+                        bg-brand-500/10
+                        text-brand-600
+                        dark:text-brand-400
+                      `
+                      : `
+                        text-gray-700
+                        dark:text-gray-200
+                        hover:bg-gray-100
+                        dark:hover:bg-gray-800
+                      `,
+                  ].join(' ')}
+                >
+                  Create Invoice
+                </Link>
 
                 {isAuthenticated && (
                   <>
