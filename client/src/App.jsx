@@ -39,7 +39,7 @@ import Home from './pages/Home';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 import Security from './pages/Security';
-
+import About from './pages/About';
 
 // ============================================================
 // AUTHENTICATION PAGES
@@ -378,6 +378,12 @@ const AppRoutes = () => {
               }
             />
 
+            <Route
+              path="/about"
+              element={
+                <About />
+              }
+            />
 
             {/* ==================================================
                 PUBLIC PRIVACY POLICY
